@@ -1,0 +1,364 @@
+import pattern
+import camera
+import pattern
+from numpy import *
+from numpy.linalg import norm
+from scipy import optimize
+import Image
+import gc
+import sys
+
+sys.setrecursionlimit(8000)
+gc.set_debug(gc.DEBUG_LEAK)
+
+# Global parameters.
+pixwid = 4288
+pixhei = 2848
+pixsize = 0.00554
+# Get the principal values from photogrammetry calibration of camera.
+prdist = 20.52
+# Need to sort out coord system of principal point from photogrammetry.
+# For now assume that prpoint is position where optical axis strikes array
+# relative to centre of array. And that increase in direction related to px
+# corresponds in increase in ax dir.
+prpoint = array([0.1065,-0.2374], dtype=float32)
+dotsize = 5.
+camdistguess = 1500.
+# For dists 0-1, 1-2, 2-0
+dotsep = [1200., 1200., sqrt(2)*1200.]
+# Specify rough locations of mirror corners in global coords.
+# Might want to underestimate mirredge and overestimate mirrstart.
+mirredge = 1175.
+mirrstart = array([25.,25.,0.], dtype=float32)
+# Width of repeating pattern segment.
+segsize = 50
+# Get pattern values from photogrammetry and a few calculations.
+# Position is horizontal edge of horiz rotated pattern, and vertical edge of
+# vert rotated pattern.
+patternpos = array([2000., -500., -3000.], dtype=float32)
+patterntrans = array([[1.,0.,0.],[0.,1.,0.],[0.,0.,1.]], dtype=float32)
+# Given number 0 -> 1, return a number 0 -> 1.
+# For now using simple linear relation.
+patternrela = poly1d([1,0])
+# Starting depth of mirror edge. Closely linked to mirrstart[2] if starting
+# pixel is at top left corner. 
+startdepth = 0.
+
+# System coordinates roughly copy coordinates of image.
+
+# THINK ABOUT MAKING CLASS THAT GETS INITIALISED WITH CALIBRATION FILE....
+
+def findprofile(filenames, initdots, outpath, calibfile):
+	# Initialise camera and pattern. Likely use values from configuration file.
+	if calibfile == '':
+		print('No calibration file given... Using program defaults.')
+	else:
+		loadcalibfile(calibfile)
+
+	cam = camera.Camera(pixwid, pixhei, pixsize, prdist, prpoint)
+	patt = pattern.Pattern(segsize, patternpos, patterntrans, patternrela)
+
+# Need to consider what happens when image has alpha channel.
+	image = Image.open(filenames[0])
+	print('Horizontal image loaded.')
+	dots = []
+	for initdot in initdots:
+		# Dots go in as tuples and come out as arrays.
+		dots.append(centroid(image, initdot,
+			cam.getobjpix(dotsize, camdistguess)))
+
+	print(dots)
+# NOT WORKING YET.
+# Could be fucking up the calculation of mcorn.
+	cam.findposition(dots[0:3], dotsep, [camdistguess,camdistguess,
+		camdistguess])
+	print('Camera position determined.')
+
+	# Determine global coordinates of mirror corners. Assumes that the mirror
+	# has been lined up with test frame.
+	mirrcorn = [mirrstart,mirrstart+array([0.,mirredge,0.]),
+		mirrstart+array([mirredge,mirredge,0.]),
+		mirrstart+array([mirredge,0.,0.])]
+	print('Corners Found.')
+
+	# Work out pixel coords of mirror corners. Give back a list of arrays.
+	mcorn = []
+	for corn in mirrcorn:
+		mcorn.append(cam.getpix(corn))
+
+	# Work out bounds to crop image to.
+	# Note that x coordinate refers to global coords not camera coords.
+	xpixmax = max(mcorn[0][0],mcorn[1][0],mcorn[2][0],mcorn[3][0])
+	xpixmin = min(mcorn[0][0],mcorn[1][0],mcorn[2][0],mcorn[3][0])
+	ypixmax = max(mcorn[0][1],mcorn[1][1],mcorn[2][1],mcorn[3][1])
+	ypixmin = min(mcorn[0][1],mcorn[1][1],mcorn[2][1],mcorn[3][1])
+	print('Max and mins found.')
+
+	# Convert corner pixels into indices of cropped new image.
+	# This is only required for determining masking.
+	for i in xrange(len(mcorn)):
+		mcorn[i] = mcorn[i] - array([xpixmin,ypixmin])
+
+# These are sometimes huge!
+	xlen = xpixmax-xpixmin + 1
+	ylen = ypixmax-ypixmin + 1
+	print(xlen)
+	print(ylen)
+	print('Offset and lengths established.')
+
+	# Crop image so that it doesn't take up as much room and convert to 
+	# an array so it is easier to manipulate.
+	image = asarray(image.crop((xpixmin, ypixmin, xpixmax, ypixmax)))
+	print('Image cropped and converted.')
+
+	# From now on work in terms of rows (y) and columns (x).
+
+	# Determining bounding shape. For now assume it follows straight lines.
+	slope = (mcorn[1][1]-mcorn[0][1])/float(mcorn[1][0]-mcorn[0][0])
+	offset = mcorn[0][1] - slope*mcorn[0][0]
+	leftline = poly1d([slope,offset])
+	
+	slope = (mcorn[2][1]-mcorn[1][1])/float(mcorn[2][0]-mcorn[1][0])
+	offset = mcorn[1][1] - slope*mcorn[1][0]
+	bottline = poly1d([slope,offset])
+
+	slope = (mcorn[3][1]-mcorn[2][1])/float(mcorn[3][0]-mcorn[2][0])
+	offset = mcorn[2][1] - slope*mcorn[2][0]
+	rightline = poly1d([slope,offset])
+
+	slope = (mcorn[0][1]-mcorn[3][1])/float(mcorn[0][0]-mcorn[3][0])
+	offset = mcorn[3][1] - slope*mcorn[3][0]
+	topline = poly1d([slope,offset])
+
+	yupbound=zeros(xlen,dtype=int)
+	ylowbound=zeros(xlen,dtype=int)
+	for x in xrange(xlen):
+		# One check.
+		if (leftline(x)>bottline(x)) and (rightline(x)>bottline(x)):
+			yupbound[x] = topline(x)
+
+		if (leftline(x)<topline(x)) and (rightline(x)<topline(x)):
+			ylowbound[x] = bottline(x)
+
+	# Call about mcorn[0] to find a pixel to start at.
+	# Actually just pass on mcorn[0] as start?
+	#indices = [mcorn[0]+array([-1,0]), mcorn[0]+array([0,-1]),
+	#		mcorn[0]+array([1,0]), mcorn[0]+array([0,1]),
+	#		mcorn[0]+array([-1,-1]), mcorn[0]+array([1,-1]),
+	#		mcorn[0]+array([1,1]), mcorn[0]+array([-1,1])]
+
+	# Doesn't matter if this corner is at edge of mirror because other side
+	# has buffer.
+	startpix = mcorn[0] 
+	print(mcorn[0])
+	
+	# Set up array of vectors to hold pattern positions.
+	# Should rename this as it also holds normal vectors.
+	# First axis in array is xpix, second is ypix.
+	# Printing of array will give values with x as rows and y as cols.
+	pattvecs = zeros((xlen, ylen, 3), dtype=float32)
+	# Using -1 to indicate that a pixel hasn't had its pattern position
+	# calculated yet.
+	pattvecs[:,:,0:2] = -1.
+
+	# Patt horizontal goes in pattvecs[,,0].
+	# Patt vertical goes in pattvecs[,,1].
+	# Patt z stays the same (0).
+	
+	#return 2
+	# Starting in top left corner of mirror.
+	calcpatterndist(patt, image, pattvecs, mask,
+			concatenate((startpix, array([0]))), segsize/2.)
+	print('Information extracted from horizontal image.')
+
+	image = Image.open(filenames[1])
+	print('Vertical image loaded.')
+	image = image.crop((xpixmin, ypixmin, xpixmax, ypixmax))
+
+	calcpatterndist(patt, image, pattvecs, mask,
+			concatenate((startpix, array([1]))), segsize/2.)
+	print('Information extracted from vertical image.')
+
+	# pattern positions are converted into a vector in global coordinates.
+	pattvecs = patt.getvector(pattvecs)
+
+	# Image removed from memory.
+	del image
+
+	# Start solving for positions and normals at top left corner.
+	# This should be ok even though we will diverge as we approach centre.
+	# First work towards centre then...
+
+	positions = zeros((xpixmax-xpixmin+1, ypixmax-ypixmin+1, 3), dtype=float32)
+	# Probably a good enough case to check if x == 0, since outside box.
+
+	solvesurface(pattvecs, positions, mask, cam, startpix,
+			array([xpixmin,ypixmin]), startdepth)
+	print('Surface normals and positions calculated.')
+
+	print('Curve fitted to surface.')
+
+	print('Ideal curve fitted to surface.')
+
+	print('Slope errors calculated relative to best fit curve.')
+
+	print('Slope errors calculated relative to ideal curve.')
+
+	return 1
+
+# Think about writing output parameters to an ongoing log file instead of
+# separate file for each panel or batch.
+
+def loadcalibfile(file):
+	"""Loads calibration file and sets parameters to file values."""
+	pixwid = 'puthere'
+	print('Calibration file: ' + file + ' loaded.')
+
+def calcpatterndist(patt, image, vecarr, mask, ind, prevdist):
+	"""This is a prime candidate to be implemented in C++."""
+	# Indexing array must use tuple, same with image.
+	# Image requires pure python int type passed to it.
+	indim = (int(ind[0]), int(ind[1]))
+	vecarr[tuple(ind)] = patt.getdist(image.getpixel(indim), prevdist)
+	# Produce indices of pixels surrounding current pixel.
+	# Consider changing order of these.
+	# Will currently zip-zag across mirror.
+	# Careful when at edge of array. Taken care of by mask. Won't reach edge.
+	# Can potentially cut down number of checks by removing diag indices. DONE.
+	indices = [ind+array([0,-1,0]),	ind+array([-1,0,0]),
+			ind+array([0,1,0]), ind+array([1,0,0])]
+	# This looping would be better off in c++.
+	for i in indices:
+		# Think about converting to tuple only once.
+		if ((vecarr[tuple(i)] == -1.) and mask[tuple(i[0:2])]):
+			calcpatterndist(patt, image, vecarr, mask, i, vecarr[tuple(ind)])
+
+def calcpatterndist(patt, image, vecarr, mask, pix, orien, prevdist):
+#	calcpatterndist(patt, image, pattvecs, mask, tuple(startpix), 0,
+#		segsize/2.)
+	
+# REPLACE MASK with a list of length wx that has 2 terms....
+
+# Possibly move from left to right, top to bottom about start point first.
+	runx = True
+	while runx:
+		while runy:
+			# Image requires pure python int type passed to it.
+			impix = (int(ind[0]), int(ind[1]))
+			vecarr[pix[0],pix[1],orien] = patt.getdist(image.getpixel(impix),
+					prevdist)
+			pix = pix + array([0,1])
+			# Not going to allow all values...
+			if !mask[tuple(pix)]:
+				runy = False
+
+		pix = pix + array([1,0])
+
+
+def solvesurface(vecs, surpos, mask, cam, ind, offset, startdepth):
+	"""This does the intial setup before the recursive function is called."""
+	pix = ind + offset
+	ch = cam.getpixdir(pix)
+	# Determine start pos from guess and using pixel vector data.
+	c = ch*(cam.campos[2]-startdepth)/ch[2]
+	startpos = cam.campos + c
+	surpos[tuple(ind)] = startpos
+
+	ph = vecs[tuple(ind)] - startpos
+	ph = ph/norm(ph)
+	vecs[tuple(ind)] = surfnorm(ch, ph)
+
+	indices = [ind+array([-1,0]), ind+array([0,-1]),
+			ind+array([1,0]), ind+array([0,1])]
+	for i in indices:
+		# Note that [][] is less efficient than [,].
+		if ((surpos[tuple(i)][0] == 0) and mask[tuple(i)]):
+			ssrecur(vecs, surpos, mask, cam, i, offset)
+
+def ssrecur(vecs, surpos, mask, cam, ind, offset):
+	# Here pix must be a 1d array.
+	pix = ind + offset
+	ch = cam.getpixdir(pix)
+	# Surface normals copied into pattern vectors.
+	indices = [ind+array([-1,0]), ind+array([0,-1]),
+			ind+array([1,0]), ind+array([0,1]),
+			ind+array([-1,-1]), ind+array([1,-1]),
+			ind+array([1,1]), ind+array([-1,1])]
+	# First work out position of this point from surroundings.
+	num = 0
+	dist = 0
+	for i in indices:
+		# Note that [][] is less efficient than [,].
+		p = surpos[tuple(i)]
+		if ((p[0] != 0) and mask[tuple(i)]):
+			num = num + 1
+			dist = dist + extrapolate(p, vecs[tuple(i)], cam.getpixdir(i),
+				cam.campos)
+	# Average distance.
+	# By taking this average we might be reducing the convergence/divergence.
+	dist = dist/num		
+	pos = dist*ch + cam.campos
+	surpos[tuple(ind)] = pos
+
+	ph = patvec[tuple(ind)] - pos
+	ph = ph/norm(ph)
+	vecs[tuple(ind)] = surfnorm(ch, ph)
+
+	for i in indices[0:4]:
+		# Note that [][] is less efficient than [,].
+		if ((surpos[tuple(i)][0]) == 0 and mask[tuple(i)]):
+			# Need to check if at boundary.
+			ssrecur(vecs, surpos, mask, cam, i, offset)
+
+def surfnorm(v1, v2):
+	# v1 is incident, v2 exiting.
+	vnor = v2 - v1
+	return vnor/norm(vnor)
+
+def extrapolate(pos, normal, camvec, campos):
+	return dot((pos-campos),normal)/dot(camvec,normal)
+
+def centroid(image, startdot, pixwidth):
+	"""Find the centre of a dot using a weighted arithmetric mean."""
+	# Make searching area 3 times width of dot either side.
+	# startdot comes in as tuple.
+	lowx = startdot[0] - 3*pixwidth
+	highx = startdot[0] + 3 *pixwidth
+	lowy = startdot[1] - 3*pixwidth
+	highy = startdot[1] + 3 *pixwidth
+	if lowx < 0:
+		lowx = 0
+	if highx > pixwid-1:
+		highx = pixwid-1
+	if lowy < 0:
+		lowy = 0
+	if highy > pixhei-1:
+		highy = pixhei-1
+	xs = arange(lowx, highx+1)
+	ys = arange(lowy, highy+1)
+	# Find weighting.
+	weight = zeros((len(xs), len(ys)), dtype=float32)
+	for x in xs:
+		for y in ys:
+			# getpixel will only except pure python ints.
+			pix = image.getpixel((int(x),int(y)))
+			# First convert to greyscale.
+			# Each channel is weighted equally.
+			greypix = (pix[0] + pix[1] + pix[2])/3.
+			# Then Invert.
+			greypix = 255 - greypix
+			weight[x-lowx,y-lowy] = greypix
+	# Subtracting background.
+	backgrnd = (mean(weight[0,:]) + mean(weight[weight.shape[0]-1,:]) +
+		mean(weight[:,0]) + mean(weight[:,weight.shape[1]-1]))/4.
+	weight = weight - backgrnd
+	# Need to get rid of negatives.....
+	weight = weight*(weight >= 0)
+	# Normalising weight.
+	weight = weight/sum(weight)
+	# Calculate centres using weighted arithmetic mean.
+	xav = sum(xs*transpose(weight))
+	yav = sum(ys*weight)
+	# Round off and save as integer. 
+# Might think about allowing sub pixel accuracy.
+	return array([round(xav), round(yav)], dtype=int)
