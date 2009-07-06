@@ -54,6 +54,10 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 		else printf("Error loading calibration file. Using defaults...\n");	
 	} else printf("No calibration file given. Using defaults...\n");	
 
+	// Might want to move but initcamera needs to be run.
+	initcamera();
+	initpattern();
+
 	image = TIFFOpen(imfnh, "r");
 	if (image == NULL) {
 		printf("Failed to load horizontal image.\n");
@@ -77,7 +81,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	}
 	printf("Horizontal image loaded\n");
 
-	// TIFFGetR is a macro.
+	// TIFFGet* is a macro.
 	R1 = TIFFGetR(*imdata);
 	R2 = TIFFGetR(*(imdata+w));
 	G1 = TIFFGetG(*imdata);
@@ -106,7 +110,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 
 	// Finding pixels that correspond to mirror bounding corners. 
 	for (int i=0; i<4; i++) {
-		getpix((float *) (corns+i*2), (pxcorns+i*2));
+		findpix((float *) (corns+i*2), (pxcorns+i*2));
 	}
 	
 	free(dots);
@@ -121,12 +125,11 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	TIFFClose(image);
 	image = NULL;
 
+	freecamera();
 }
 
 void extractcalib(FILE *file) {
 
-	initcamera();
-	initpattern();
 }
 
 void centroid(uint32 *im, uint32 w, uint32 h, int *idot, float *dot,

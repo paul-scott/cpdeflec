@@ -18,7 +18,10 @@ typedef struct {
 float getvalpoly(Polynom *pol, float val);
 float fdot(const float *x, const float *y);
 float fnorm(const float *x);
-float fscale(const float alpha, float *x);
+void fscale(const float alpha, float *x);
+void faxpy(const float alpha, const float *x, float *y);
+void fcross(const float *a, const float *b, float *c);
+void fmatxvec(const float *M, const float *x, float *y);
 
 
 #endif /* INC_COMMATH_H */
