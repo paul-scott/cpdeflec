@@ -10,9 +10,12 @@ static float pattrans[3][3] = {{1.0f,0.0f,0.0f},{0.0f,1.0f,0.0f},
 	{0.0f,0.0f,1.0f}}; // Coordinate system translation
 static float segsize = 50.0f; // Width of repeating pattern segment
 static float coeffs[2] = {0.0f,1.0f}; // Coeffs of hue/distance relation
-static Polynom pathuerela = {2,{0.0f,1.0f}};
+static float pathuecoeffs[2] = {0.0f, 1.0f};
+static Polynom pathuerela;
 
 
 void initpattern() {
+	pathuerela.degree = 2;
+	pathuerela.coeffs = pathuecoeffs;
 
 }

@@ -8,7 +8,7 @@ static float dotsep[3] = {1200.0f,1697.056f,1200.0f}; // Distance between
 // TL-BL, BL-TR, TR-TL
 static float mirredge = 1175.0f;
 static float corns[4][3] = {{35.0f,35.0f,50.0f},{35.0f,1035.0f,50.0f},
-	{25.0f,25.0f,0.0f},{25.0f,25.0f,0.0f}}; // Mirror boundary corners:
+	{1035.0f,1035.0f,50.0f},{1035.0f,35.0f,50.0f}}; // Mirror boundary corners:
 // TL, BL, BR, TR
 static float camdistguess = 2500.0f; // Guess of distance from mirror to camera
 
@@ -110,14 +110,147 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 
 	// Finding pixels that correspond to mirror bounding corners. 
 	for (int i=0; i<4; i++) {
-		findpix((float *) (corns+i*2), (pxcorns+i*2));
+		findpix(corns[i], (pxcorns+i*2));
+		printf("%d, %d\n", *(pxcorns+i*2), *(pxcorns+i*2+1));
 	}
-	
+
 	free(dots);
 	dots = NULL;
 
+	// Could crop image here.
+	
+	// Determining max and min bounds.
+	int xpixmax = imax(*(pxcorns),imax(*(pxcorns+2),
+					imax(*(pxcorns+4),*(pxcorns+6))));
+	int ypixmax = imax(*(pxcorns+1),imax(*(pxcorns+3),
+					imax(*(pxcorns+5),*(pxcorns+7))));
+	int xpixmin = imin(*(pxcorns),imin(*(pxcorns+2),
+					imin(*(pxcorns+4),*(pxcorns+6))));
+	int ypixmin = imin(*(pxcorns+1),imin(*(pxcorns+3),
+					imin(*(pxcorns+5),*(pxcorns+7))));
+
+	int xlen = xpixmax - xpixmin + 1;
+	int ylen = ypixmax - ypixmin + 1;
+
+	printf("Size of area: %d, %d\n", xlen, ylen);
+	
+	float *tcoeffs = malloc(2*sizeof(*tcoeffs));
+	float *bcoeffs = malloc(2*sizeof(*bcoeffs));
+	float *lcoeffs = malloc(2*sizeof(*lcoeffs));
+	float *rcoeffs = malloc(2*sizeof(*rcoeffs));
+	Polynom tline = {1, tcoeffs};
+	Polynom bline = {1, bcoeffs};
+	Polynom lline = {1, lcoeffs};
+	Polynom rline = {1, rcoeffs};
+	float *ybound = malloc(2*xlen*sizeof(*ybound));
+
+	// Finding slope and offset for top bounding line.
+	// First checking to make sure that we don't get infinite slope.
+	// If so then polynomial set to constant zero (it shouldn't get called).
+	if (*(pxcorns) == *(pxcorns+3*2)) {
+		tline.degree = 0;
+		*tcoeffs = 0.0f;
+	} else {
+		*(tcoeffs+1) = ((float) (*(pxcorns+3*2+1) - *(pxcorns+1)))/
+							(*(pxcorns+3*2) - *(pxcorns));
+		*(tcoeffs) = (float) (*(pxcorns+1) -
+							(*(tcoeffs+1))*(*(pxcorns)));
+	}
+
+	// Finding slope and offset for bottom bounding line.
+	// First checking to make sure that we don't get infinite slope.
+	// If so then polynomial set to constant zero (it shouldn't get called).
+	if (*(pxcorns+2*2) == *(pxcorns+1*2)) {
+		bline.degree = 0;
+		*bcoeffs = 0.0f;
+	} else {
+		*(bcoeffs+1) = ((float) (*(pxcorns+2*2+1) - *(pxcorns+1*2+1)))/
+							(*(pxcorns+2*2) - *(pxcorns+1*2));
+		*(bcoeffs) = (float) (*(pxcorns+1*2+1) -
+							(*(bcoeffs+1))*(*(pxcorns+1*2)));
+	}
+
+	// Finding slope and offset for left bounding line.
+	// First checking to make sure that we don't get infinite slope.
+	// If so then polynomial set to constant zero (it shouldn't get called).
+	if (*(pxcorns) == *(pxcorns+1*2)) {
+		lline.degree = 0;
+		*lcoeffs = 0.0f;
+	} else {
+		*(lcoeffs+1) = ((float) (*(pxcorns+1*2+1) - *(pxcorns+1)))/
+							(*(pxcorns+1*2) - *(pxcorns));
+		*(lcoeffs) = (float) (*(pxcorns+1) -
+							(*(lcoeffs+1))*(*(pxcorns)));
+	}
+
+	// Finding slope and offset for right bounding line.
+	// First checking to make sure that we don't get infinite slope.
+	// If so then polynomial set to constant zero (it shouldn't get called).
+	if (*(pxcorns+2*2) == *(pxcorns+3*2)) {
+		rline.degree = 0;
+		*rcoeffs = 0.0f;
+	} else {
+		*(rcoeffs+1) = ((float) (*(pxcorns+3*2+1) - *(pxcorns+2*2+1)))/
+							(*(pxcorns+3*2) - *(pxcorns+2*2));
+		*(rcoeffs) = (float) (*(pxcorns+2*2+1) -
+							(*(rcoeffs+1))*(*(pxcorns+2*2)));
+	}
+
+	if (*(pxcorns) == *(pxcorns+1*2)) {
+		*(ybound) = *(pxcorns+1);
+		*(ybound+1) = *(pxcorns+1*2+1);
+	} else {
+		// At most one of the two loops will execute.
+		for (int x=*(pxcorns); x<=(*(pxcorns+1*2)); x++) {
+			*(ybound+(x-xpixmin)*2) = (int) roundf(polyget(&tline,(float) x));
+			*(ybound+(x-xpixmin)*2+1) = (int) roundf(polyget(&lline,(float) x));
+		}
+		for (int x=*(pxcorns+1*2); x<=(*(pxcorns)); x++) {
+			*(ybound+(x-xpixmin)*2) = (int) roundf(polyget(&lline,(float) x));
+			*(ybound+(x-xpixmin)*2+1) = (int) roundf(polyget(&bline,(float) x));
+		}
+	}
+
+	if (*(pxcorns+2*2) == *(pxcorns+3*2)) {
+		*(ybound) = *(pxcorns+3*2+1);
+		*(ybound+1) = *(pxcorns+2*2+1);
+	} else {
+		// At most one of the two loops will execute.
+		for (int x=*(pxcorns+3*2); x<=(*(pxcorns+2*2)); x++) {
+			*(ybound+(x-xpixmin)*2) = (int) roundf(polyget(&rline,(float) x));
+			*(ybound+(x-xpixmin)*2+1) = (int) roundf(polyget(&bline,(float) x));
+		}
+		for (int x=*(pxcorns+2*2); x<=(*(pxcorns+3*2)); x++) {
+			*(ybound+(x-xpixmin)*2) = (int) roundf(polyget(&tline,(float) x));
+			*(ybound+(x-xpixmin)*2+1) = (int) roundf(polyget(&rline,(float) x));
+		}
+	}
+
+	int startmid = imax(*(pxcorns),*(pxcorns+1*2));
+	int endmid = imin(*(pxcorns+2*2),*(pxcorns+3*2));
+	for (int x=startmid+1; x<endmid; x++) {
+		*(ybound+(x-xpixmin)*2) = (int) roundf(polyget(&tline,(float) x));
+		*(ybound+(x-xpixmin)*2+1) = (int) roundf(polyget(&bline,(float) x));
+	}
+
+	for (int i=0; i<xlen; i++) {
+		printf("%d, %d\n", *(ybound+i*2), *(ybound+i*2+1));
+	}
+
+	free(tcoeffs);
+	tcoeffs = NULL;
+	free(bcoeffs);
+	bcoeffs = NULL;
+	free(lcoeffs);
+	lcoeffs = NULL;
+	free(rcoeffs);
+	rcoeffs = NULL;
+
 	free(pxcorns);
 	pxcorns = NULL;
+
+	free(ybound);
+	ybound = NULL;
 
 	_TIFFfree(imdata);
 	imdata = NULL;

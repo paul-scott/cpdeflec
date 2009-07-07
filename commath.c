@@ -1,8 +1,12 @@
 #include "commath.h"
 
 
-float getvalpoly(Polynom *pol, float val) {
-
+float polyget(Polynom *pol, float val) {
+	float out = 0.0f;
+	for (int i=0; i<(pol->degree+1); i++) {
+		out = out + *(pol->coeffs+i)*powf(val, (float) i);
+	}
+	return out;
 }
 
 // Could potentially use macros to implement these:
@@ -32,4 +36,12 @@ void fmatxvec(const float *M, const float *x, float *y) {
 	*(y) = fdot(M,x);
 	*(y+1) = fdot(M+1*3,x);
 	*(y+2) = fdot(M+2*3,x);
+}
+
+int imax(int a, int b) {
+	return a > b ? a : b;
+}
+
+int imin(int a, int b) {
+	return a < b ? a : b;
 }

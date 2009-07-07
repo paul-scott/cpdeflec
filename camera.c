@@ -23,6 +23,7 @@ static float prpoint[2] = {0.1065f,-0.2374f}; // Pricipal point in mm
 
 static float campos[3] = {0.0f,0.0f,0.0f};
 static float *camtrans;
+static float *caminvtrans;
 
 void print_state(size_t iter, gsl_multiroot_fsolver *s);
 void finddirpixcam(float *pix, float *dir);
@@ -30,11 +31,14 @@ int func(const gsl_vector *p, void *params, gsl_vector *f);
 
 void initcamera() {
 	camtrans = malloc(3*3*sizeof(*camtrans));
+	caminvtrans = malloc(3*3*sizeof(*caminvtrans));
 }
 
 void freecamera() {
 	free(camtrans);
 	camtrans = NULL;
+	free(caminvtrans);
+	caminvtrans = NULL;
 }
 
 int objpixsize(float objsize, float objdist) {
@@ -147,6 +151,40 @@ int locatecam(float *dots, float *dotsep, float distguess) {
 
 	printf("campos: %f, %f, %f\n", *campos, *(campos+1), *(campos+2));
 
+	// Caluclate inverse camera transform.
+	gsl_matrix *ctran = gsl_matrix_alloc(3,3);
+	gsl_matrix *cinvtran = gsl_matrix_alloc(3,3);
+	gsl_permutation *perm = gsl_permutation_alloc(3);
+	int signum = 0;
+	for (int i=0; i<3; i++) {
+		for (int j=0; j<3; j++) {
+			gsl_matrix_set(ctran, i, j, (double) *(camtrans+i*3+j));
+			//printf("%f, ", *(camtrans+i*3+j));
+		}
+	}
+	gsl_linalg_LU_decomp(ctran, perm, &signum);
+	gsl_linalg_LU_invert(ctran, perm, cinvtran);
+	
+	for (int i=0; i<3; i++) {
+		for (int j=0; j<3; j++) {
+			*(caminvtrans+i*3+j) = (float) gsl_matrix_get(cinvtran, i, j);
+			//printf("%f, ", *(caminvtrans+i*3+j));
+		}
+	}
+
+	/* USED FOR CHECKING INVERSE
+	fmatxvec(caminvtrans, campos, (ph+3)); // Only uses first vector in ph
+	printf("orig: %f, %f, %f\n", *ph, *(ph+1), *(ph+2));
+	printf("transed: %f, %f, %f\n", *(ph+3), *(ph+3+1), *(ph+3+2));
+	*/
+
+	gsl_matrix_free(ctran);
+	ctran = NULL;
+	gsl_matrix_free(cinvtran);
+	cinvtran = NULL;
+	gsl_permutation_free(perm);
+	perm = NULL;
+
 	gsl_vector_free(dists);
 	dists = NULL;
 
@@ -166,8 +204,26 @@ int locatecam(float *dots, float *dotsep, float distguess) {
 }
 
 // Finds pixel that intercepts position vector.
-void findpix(float *vec, int *pix) {
+void findpix(const float *vec, int *pix) {
+	float *pos = malloc(3*sizeof(*pos)); // Position from camera
+	float *dir = malloc(3*sizeof(*dir));
+	// Changing origin.
+	*(pos) = *(vec) - *(campos);
+	*(pos+1) = *(vec+1) - *(campos+1);
+	*(pos+2) = *(vec+2) - *(campos+2);
+	// Transforming to camera coord system.
+	fmatxvec(caminvtrans, pos, dir);
+	free(pos);
+	pos = NULL;
 
+	// Position on array from optical centre.
+	fscale(-prdist/(*(dir+2)), dir);
+	printf("%f, %f, %f\n", *(dir), *(dir+1), *(dir+2));
+	*(pix) = (int) ((*(dir) - prpoint[0])/pxsize + camdims[0]/2.0f - 0.5f);
+	*(pix+1) = (int) ((*(dir+1) - prpoint[1])/pxsize + camdims[1]/2.0f - 0.5f);
+
+	free(dir);
+	dir = NULL;
 }
 
 // Calculates global direction of pixel from camera.
