@@ -18,6 +18,9 @@ static float camdistguess = 2500.0f; // Guess of distance from mirror to camera
  */
 void extractcalib(FILE *file);
 void centroid(uint32 *im, uint32 w, uint32 h, int *idot, float *dot, int dotpx);
+void calcpattvecs(const uint32 *im, const int iw, float *vecs, const int bw,
+		const int *ipix, const int *yb, const int *offs, const float idist,
+		const int orien);
 
 /* Functions for creating pointers within python
  * In python for (3,2) array use:
@@ -33,12 +36,13 @@ void set2darray(int *marray, int r, int c, int cs, int val) {
 	*(marray + r*cs + c) = val;
 }
 
+// MIGHT WANT TO CONSIDER CHECKING EACH MALLOC FOR ERROR.
 void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 		char *calbfn) {
 	TIFF *image; // TIFF file pointer
-	uint32 w, h; // Image width and height
+	uint32 wid, hei; // Image width and height
 	uint32 *imdata; // Pixel data loaded from TIFF image, y major
-	int R1, R2, G1, G2, B1, B2, A;
+	int R1, R2, R3;
 	int dotpx; // Approximate width of ref dot in pixels
 	float *dots = malloc(3*2*sizeof(*dots)); // Sub-pixel ref dot locations
 	int *pxcorns = malloc(4*2*sizeof(*pxcorns));
@@ -65,36 +69,35 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	}
 
 	// Load in image data.
-	TIFFGetField(image, TIFFTAG_IMAGEWIDTH, &w);
-	TIFFGetField(image, TIFFTAG_IMAGELENGTH, &h);
-	printf("%d, %d\n", w, h);
+	TIFFGetField(image, TIFFTAG_IMAGEWIDTH, &wid);
+	TIFFGetField(image, TIFFTAG_IMAGELENGTH, &hei);
+	printf("%d, %d\n", wid, hei);
 
-	imdata = (uint32 *) _TIFFmalloc(w*h*sizeof(uint32)); 
+	imdata = (uint32 *) _TIFFmalloc(wid*hei*sizeof(uint32)); 
 	if (imdata == NULL) {
 		printf("Failed to allocate memory for horizontal image.\n");
 		exit(1);
 	}
-	if (TIFFReadRGBAImageOriented(image, w, h, imdata, ORIENTATION_TOPLEFT,
+	if (TIFFReadRGBAImageOriented(image, wid, hei, imdata, ORIENTATION_TOPLEFT,
 			0) == 0) {
 		printf("Failed to read horizontal image.\n");
 		exit(1);
 	}
 	printf("Horizontal image loaded\n");
 
-	// TIFFGet* is a macro.
-	R1 = TIFFGetR(*imdata);
-	R2 = TIFFGetR(*(imdata+w));
-	G1 = TIFFGetG(*imdata);
-	G2 = TIFFGetG(*(imdata+w));
-	B1 = TIFFGetB(*imdata);
-	B2 = TIFFGetB(*(imdata+w));
-	A = TIFFGetA(*imdata);
-	printf("%d,%d,%d,%d,%d,%d,%d\n",A,R1,G1,B1,R2,G2,B2);
+	TIFFClose(image);
+	image = NULL;
+
+	// Testing.
+	R1 = TIFFGetR(*(imdata));
+	R2 = TIFFGetR(*(imdata+1));
+	R3 = TIFFGetR(*(imdata+wid));
+	printf("R, R+1, R+wid: %d, %d, %d\n", R1, R2, R3);
 
 	// Find centre of dots.
 	dotpx = objpixsize(dotsize, camdistguess);
 	for (int i=0; i<3; i++) {
-		centroid(imdata, w, h, (idots+i*2), (dots+i*2), dotpx);
+		centroid(imdata, wid, hei, (idots+i*2), (dots+i*2), dotpx);
 	}
 
 	printf("Centroided dots:\n");
@@ -117,8 +120,6 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	free(dots);
 	dots = NULL;
 
-	// Could crop image here.
-	
 	// Determining max and min bounds.
 	int xpixmax = imax(*(pxcorns),imax(*(pxcorns+2),
 					imax(*(pxcorns+4),*(pxcorns+6))));
@@ -131,9 +132,22 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 
 	int xlen = xpixmax - xpixmin + 1;
 	int ylen = ypixmax - ypixmin + 1;
+	int offset[2] = {xpixmin, ypixmin};
+
+	// Subtracting offset from pxcorns.
+	// Need to use offset for indices of for camera and imdata.
+	for (int i=0; i<4; i++) {
+		*(pxcorns+i*2) = *(pxcorns+i*2) - *(offset);
+		*(pxcorns+i*2+1) = *(pxcorns+i*2+1) - *(offset+1);
+	}
 
 	printf("Size of area: %d, %d\n", xlen, ylen);
-	
+	printf("Offset: %d, %d\n", offset[0], offset[1]);
+	printf("StartPix %d, %d, %d\n",
+			TIFFGetR(*(imdata+(*(offset+1))*wid+*offset)),
+			TIFFGetG(*(imdata+(*(offset+1))*wid+*offset)),
+			TIFFGetB(*(imdata+(*(offset+1))*wid+*offset)));
+
 	float *tcoeffs = malloc(2*sizeof(*tcoeffs));
 	float *bcoeffs = malloc(2*sizeof(*bcoeffs));
 	float *lcoeffs = malloc(2*sizeof(*lcoeffs));
@@ -142,7 +156,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	Polynom bline = {1, bcoeffs};
 	Polynom lline = {1, lcoeffs};
 	Polynom rline = {1, rcoeffs};
-	float *ybound = malloc(2*xlen*sizeof(*ybound));
+	int *ybound = malloc(2*xlen*sizeof(*ybound));
 
 	// Finding slope and offset for top bounding line.
 	// First checking to make sure that we don't get infinite slope.
@@ -155,6 +169,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 							(*(pxcorns+3*2) - *(pxcorns));
 		*(tcoeffs) = (float) (*(pxcorns+1) -
 							(*(tcoeffs+1))*(*(pxcorns)));
+		printf("coeffs: %f, %f\n", *(tline.coeffs), *(tline.coeffs+1));
 	}
 
 	// Finding slope and offset for bottom bounding line.
@@ -168,6 +183,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 							(*(pxcorns+2*2) - *(pxcorns+1*2));
 		*(bcoeffs) = (float) (*(pxcorns+1*2+1) -
 							(*(bcoeffs+1))*(*(pxcorns+1*2)));
+		printf("coeffs: %f, %f\n", *(bline.coeffs), *(bline.coeffs+1));
 	}
 
 	// Finding slope and offset for left bounding line.
@@ -181,6 +197,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 							(*(pxcorns+1*2) - *(pxcorns));
 		*(lcoeffs) = (float) (*(pxcorns+1) -
 							(*(lcoeffs+1))*(*(pxcorns)));
+		printf("coeffs: %f, %f\n", *(lline.coeffs), *(lline.coeffs+1));
 	}
 
 	// Finding slope and offset for right bounding line.
@@ -194,48 +211,48 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 							(*(pxcorns+3*2) - *(pxcorns+2*2));
 		*(rcoeffs) = (float) (*(pxcorns+2*2+1) -
 							(*(rcoeffs+1))*(*(pxcorns+2*2)));
+		printf("coeffs: %f, %f\n", *(rline.coeffs), *(rline.coeffs+1));
 	}
 
+	// Calculating bounds.
 	if (*(pxcorns) == *(pxcorns+1*2)) {
 		*(ybound) = *(pxcorns+1);
 		*(ybound+1) = *(pxcorns+1*2+1);
 	} else {
 		// At most one of the two loops will execute.
 		for (int x=*(pxcorns); x<=(*(pxcorns+1*2)); x++) {
-			*(ybound+(x-xpixmin)*2) = (int) roundf(polyget(&tline,(float) x));
-			*(ybound+(x-xpixmin)*2+1) = (int) roundf(polyget(&lline,(float) x));
+			*(ybound+x*2) = (int) roundf(polyget(&tline,(float) x));
+			*(ybound+x*2+1) = (int) roundf(polyget(&lline,(float) x));
 		}
 		for (int x=*(pxcorns+1*2); x<=(*(pxcorns)); x++) {
-			*(ybound+(x-xpixmin)*2) = (int) roundf(polyget(&lline,(float) x));
-			*(ybound+(x-xpixmin)*2+1) = (int) roundf(polyget(&bline,(float) x));
+			*(ybound+x*2) = (int) roundf(polyget(&lline,(float) x));
+			*(ybound+x*2+1) = (int) roundf(polyget(&bline,(float) x));
 		}
 	}
 
 	if (*(pxcorns+2*2) == *(pxcorns+3*2)) {
-		*(ybound) = *(pxcorns+3*2+1);
-		*(ybound+1) = *(pxcorns+2*2+1);
+		*(ybound+(xlen-1)*2) = *(pxcorns+3*2+1);
+		*(ybound+(xlen-1)*2+1) = *(pxcorns+2*2+1);
 	} else {
 		// At most one of the two loops will execute.
 		for (int x=*(pxcorns+3*2); x<=(*(pxcorns+2*2)); x++) {
-			*(ybound+(x-xpixmin)*2) = (int) roundf(polyget(&rline,(float) x));
-			*(ybound+(x-xpixmin)*2+1) = (int) roundf(polyget(&bline,(float) x));
+			*(ybound+x*2) = (int) roundf(polyget(&rline,(float) x));
+			*(ybound+x*2+1) = (int) roundf(polyget(&bline,(float) x));
 		}
 		for (int x=*(pxcorns+2*2); x<=(*(pxcorns+3*2)); x++) {
-			*(ybound+(x-xpixmin)*2) = (int) roundf(polyget(&tline,(float) x));
-			*(ybound+(x-xpixmin)*2+1) = (int) roundf(polyget(&rline,(float) x));
+			*(ybound+x*2) = (int) roundf(polyget(&tline,(float) x));
+			*(ybound+x*2+1) = (int) roundf(polyget(&rline,(float) x));
 		}
 	}
 
 	int startmid = imax(*(pxcorns),*(pxcorns+1*2));
 	int endmid = imin(*(pxcorns+2*2),*(pxcorns+3*2));
 	for (int x=startmid+1; x<endmid; x++) {
-		*(ybound+(x-xpixmin)*2) = (int) roundf(polyget(&tline,(float) x));
-		*(ybound+(x-xpixmin)*2+1) = (int) roundf(polyget(&bline,(float) x));
+		*(ybound+x*2) = (int) roundf(polyget(&tline,(float) x));
+		*(ybound+x*2+1) = (int) roundf(polyget(&bline,(float) x));
 	}
 
-	for (int i=0; i<xlen; i++) {
-		printf("%d, %d\n", *(ybound+i*2), *(ybound+i*2+1));
-	}
+	printf("ybound at 0:, %d, %d\n", *ybound, *(ybound+1));
 
 	free(tcoeffs);
 	tcoeffs = NULL;
@@ -246,23 +263,70 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	free(rcoeffs);
 	rcoeffs = NULL;
 
+	// Set up array of vectors to hold pattern positions. Later on it holds
+	// normal vectors.
+	float *vecs = malloc(xlen*ylen*3*sizeof(*vecs));
+	if (vecs == NULL) {
+		printf("Cannot allocate memory for vecs, exiting...\n");
+		exit(1);
+	}
+
+	// Initialising array to -1 which is used as a check in calcpattvecs.
+	for (int i=0; i<(xlen*ylen*3); i++) {
+		*(vecs+i) = -1.0f;
+	}
+	 
+	// Start looking in first segment.
+	calcpattvecs(imdata, wid, vecs, xlen, pxcorns, ybound, offset,
+			0.5f*segsize, 0);
+	printf("Information extracted from horizontal image.\n");
+
 	free(pxcorns);
 	pxcorns = NULL;
-
-	free(ybound);
-	ybound = NULL;
 
 	_TIFFfree(imdata);
 	imdata = NULL;
 
-	TIFFClose(image);
-	image = NULL;
+	free(ybound);
+	ybound = NULL;
+
+	free(vecs);
+	vecs = NULL;
 
 	freecamera();
 }
 
 void extractcalib(FILE *file) {
 
+}
+
+// Determines which part of pattern is reflected for each pixel.
+void calcpattvecs(const uint32 *im, const int iw, float *vecs, const int bw,
+		const int *ipix, const int *yb, const int *offs, const float idist,
+		const int orien) {
+	// Orientation 0 is horizontal, 1 is vertical.
+
+	float dist = getdist((im+(*(ipix+1)+*(offs+1))*iw+*(ipix)+*offs), idist);
+	// Run down first column, shouldn't need to go up since at corner.
+	for (int y=*(ipix+1)+1; y<=*(yb+(*ipix)*2+1); y++) {
+		*(vecs+(y*bw+*ipix)*3+orien) = getdist((im+(y+*(offs+1))*iw+*(ipix)+
+									*offs), *(vecs+((y-1)*bw+*ipix)*3+orien));
+		printf("%f, %d\n", *(vecs+(y*bw+*ipix)*3+orien), y); 
+	}
+
+	// Work our way left.
+
+	/*
+
+	for x in xrange(ipix[0]-1,-1,-1):
+		# Find a value between the bounds.
+		ystart = min(max(ipix[1],yb[x,0]),yb[x,1])
+		pdist = vecs[x+1,ystart,orien]
+		# Search at and above the starting point.
+		for y in xrange(ystart,yb[x,0]-1,-1):
+			pdist = patt.getdist(image[x,y], pdist)
+			vecs[x,y,orien] = pdist
+	*/
 }
 
 void centroid(uint32 *im, uint32 w, uint32 h, int *idot, float *dot,

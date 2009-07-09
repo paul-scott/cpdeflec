@@ -25,6 +25,8 @@ void fcross(const float *a, const float *b, float *c);
 void fmatxvec(const float *M, const float *x, float *y);
 int imax(int a, int b);
 int imin(int a, int b);
+//float fmax(float a, float b);
+//float fmin(float a, float b);
 
 
 #endif /* INC_COMMATH_H */
