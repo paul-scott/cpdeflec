@@ -295,7 +295,7 @@ def solvesurface(cam, vecs, poss, ipix, offset, yb, startdepth):
 
 	for y in xrange(ipix[1]-1,yb[ipix[0],0]-1,-1):
 		ch = cam.getpixdir(array([ipix[0],y])+offset)
-		dist = extrapolate(poss[ipix[0],y+1], vecs[ipix[0],y-1], ch,
+		dist = extrapolate(poss[ipix[0],y+1], vecs[ipix[0],y+1], ch,
 				cam.campos)
 		poss[ipix[0],y] = dist*ch + cam.campos
 		ph = vecs[ipix[0],y] - poss[ipix[0],y]

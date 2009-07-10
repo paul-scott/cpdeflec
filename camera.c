@@ -21,12 +21,12 @@ static float pxsize = 0.00554f; // Size of a pixel in mm
 static float prdist = 20.52f; // Pricipal distance of camera lens in mm
 static float prpoint[2] = {0.1065f,-0.2374f}; // Pricipal point in mm
 
-static float campos[3] = {0.0f,0.0f,0.0f};
+float campos[3] = {0.0f,0.0f,0.0f};
 static float *camtrans;
 static float *caminvtrans;
 
 void print_state(size_t iter, gsl_multiroot_fsolver *s);
-void finddirpixcam(float *pix, float *dir);
+void finddirpixcam(const float *pix, float *dir);
 int func(const gsl_vector *p, void *params, gsl_vector *f);
 
 void initcamera() {
@@ -227,22 +227,28 @@ void findpix(const float *vec, int *pix) {
 }
 
 // Calculates global direction of pixel from camera.
-void finddirpix(int *pix, float *dir) {
+void finddirpix(const int x, const int y, float *dir) {
+	// Similar to finddirpixcam except it works on integers and transforms
+	// the direction vector to global coords.
+	float temp[3];
+	temp[0] = -(pxsize*(x - *(camdims)/2.0f + 0.5f) + *(prpoint));
+	temp[1] = -(pxsize*(y - *(camdims+1)/2.0f + 0.5f) + *(prpoint+1));
+	temp[2] = prdist;
+	// Normalizing vector.
+	fscale(1.0f/fnorm(temp),temp);
 
-	// Note that finddirpixcam requires a float...
-	// Might consider making another function that only operates on integers.
+	fmatxvec(camtrans, temp, dir);
 }
 
 // Calculates camera coord direction of pixel from camera. Note the use of
 // float to get sub-pixel accuracy for locating.
-void finddirpixcam(float *pix, float *dir) {
+void finddirpixcam(const float *pix, float *dir) {
 	/* Define camera ax opposite to px and ay opposite to py. az is along
 	 * optical axis, therefore (x,y,z)=(0,0,0) optical centre. As position
 	 * of pixel in array increases, image pixel value increases.
 	 * Signs used here to get the direction right. Reverse signs and we
 	 * get position of pixel in the array from optical centre.
 	 */
-	float mag;
 	*(dir) = -(pxsize*(*(pix) - *(camdims)/2.0f + 0.5f) + *(prpoint));
 	*(dir+1) = -(pxsize*(*(pix+1) - *(camdims+1)/2.0f + 0.5f) + *(prpoint+1));
 	*(dir+2) = prdist;

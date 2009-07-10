@@ -5,7 +5,8 @@
  * Get locating values from photogrammetry. Position is horizontal edge of
  * horiz rotated pattern, and vertical edge of vert rotated pattern.
  */
-static float patpos[3] = {2000.0f,-500.0f,-3000.0f}; // Pos of pattern corner
+static float patpos[3] = {630.36292f,-363.06461f,-2343.1965f}; // Pos of
+//pattern corner
 static float pattrans[3][3] = {{1.0f,0.0f,0.0f},{0.0f,1.0f,0.0f},
 	{0.0f,0.0f,1.0f}}; // Coordinate system translation
 float segsize = 50.0f; // Width of repeating pattern segment
@@ -25,11 +26,21 @@ void initpattern() {
 	rel = temprelbins;
 }
 
+void transpattvec(float *vec) {
+	// Need to set z component to zero. 
+	float temp[3];
+	*(vec+2) = 0.0f;
+	fmatxvec((float *) pattrans, vec, temp);
+	*(vec) = temp[0] + patpos[0];
+	*(vec+1) = temp[1] + patpos[1];
+	*(vec+2) = temp[2] + patpos[2];
+}
+
 float getdist(const uint32 *rgb, const float pdist) {
 	// Might like to think of not changing pdist if we get a grey pixel.
 	float shift = hueshift(gethue(rgb));
 	float pshift = fmodf(pdist, segsize);
-	printf("s, ps, %f, %f\n", shift, pshift);
+	//printf("s, ps, %f, %f\n", shift, pshift);
 
 	if (shift < (pshift-0.5f*segsize)) {
 		return (pdist - pshift + segsize + shift);
@@ -52,7 +63,7 @@ float gethue(const uint32 *rgb) {
 	
 	if (maxc == minc) {
 		hue = 0.0f;
-		printf("Grey pixel.\n");
+		//printf("Grey pixel.\n");
 	} else if (R == maxc) {
 		hue = fmodf(1.0f+(G-B)/(6.0f*(maxc-minc)),1.0f);
 	} else if (G == maxc) {
@@ -61,7 +72,7 @@ float gethue(const uint32 *rgb) {
 		hue = (4.0f + (R-G)/(maxc-minc))/6.0f;
 	}
 
-	printf("hue: %f, %f, %f, %f ", hue, R*255.0f, G*255.0f, B*255.0f);
+	//printf("hue: %f, %f, %f, %f ", hue, R*255.0f, G*255.0f, B*255.0f);
 	return hue;
 }
 
