@@ -10,6 +10,7 @@
 #include "commath.h"
 #include "camera.h"
 #include "pattern.h"
+#include "fitting.h"
 
 /* STRUCTURES
  * **********

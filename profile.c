@@ -330,6 +330,32 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 
 	// Need to now find best fitting curve.
 	// And fit ideal curve.
+	// Ideal curve fitting:
+	float *idealcurves = malloc(2*sizeof(*idealcurves));
+	*idealcurves = 3.3098f;
+	*(idealcurves+1) = 3.3098f;
+	//Errparams idealpars = {&fixedparab, poss, xlen, ybound, idealcurves};
+	Errparams idealpars;
+	idealpars.f = &fixedparab;
+	idealpars.poss = poss;
+	idealpars.xlen = xlen;
+	idealpars.yb = ybound;
+	idealpars.fpars = idealcurves;
+	gsl_vector *idealvars = gsl_vector_alloc(3);
+	// Setting starting point.
+	gsl_vector_set(idealvars, 0, 500.0);
+	gsl_vector_set(idealvars, 1, 500.0);
+	gsl_vector_set(idealvars, 1, -40.0);
+
+	// Fitting ideal curve to data.
+	minerror(&idealpars, 3, idealvars);
+
+	free(idealcurves);
+	idealcurves = NULL;
+
+	gsl_vector_free(idealvars);
+	idealvars = NULL;
+
 	// Then calculate slope errors against best fitting curve and ideal curve.
 
 	free(pxcorns);
