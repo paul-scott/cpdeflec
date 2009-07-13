@@ -5,40 +5,60 @@
  * Get locating values from photogrammetry. Position is horizontal edge of
  * horiz rotated pattern, and vertical edge of vert rotated pattern.
  */
-static float patpos[3] = {630.36292f,-363.06461f,-2343.1965f}; // Pos of
-//pattern corner
-static float pattrans[3][3] = {{1.0f,0.0f,0.0f},{0.0f,1.0f,0.0f},
-	{0.0f,0.0f,1.0f}}; // Coordinate system translation
-float segsize = 50.0f; // Width of repeating pattern segment
-static float coeffs[2] = {0.0f,1.0f}; // Coeffs of hue/distance relation
-static int relbins = 10;
+// NOTE NEED TO FIND BETTER VALUE.
+static float patpos[3] = {635.78213f,-364.31177f,-2334.4997f}; // Pos of
+// pattern corner
+// NOTE MIGHT WANT TO WORK ON NON ORTHOGONAL VECTORS.
+static float pattrans[3][3] = {{0.8542370f,0.0015481f,0.5198815f},
+	{0.0018613f,0.9999801f,-0.0060361f},
+	{-0.5198805f,0.0061239f,0.8542171f}}; // Coordinate system translation
+float segsize = 47.7f; // Width of repeating pattern segment
+static int relbins = 274;
 static float *rel;
-// TEMPORARY UNTIL CALIB FILE USED.
-static float temprelbins[10] = {0.0f,0.1f,0.2f,0.3f,0.4f,0.5f,0.6f,0.7f,0.8f,
-									0.9f};
 
 float gethue(const uint32 *rgb);
-float hueshift(float hue);
+float hueshift(const float hue, const int orien);
 
-void initpattern() {
+void initpattern(const char *relfn) {
+	rel = malloc(relbins*sizeof(*rel));
+	const size_t buffsize = 50;
+	char line[buffsize];
+	int lcount = 0;
+
 	// Need to drag pattern relation in from file.
-	// For now use dummy data.
-	rel = temprelbins;
+	FILE *relfile = fopen(relfn, "r");
+	if (relfile==NULL) {
+		printf("Failed to open hue relation file, exiting...\n");
+		exit(1);
+	}
+	while (fgets(line, buffsize, relfile) != NULL) {
+		if (lcount >= relbins) break;
+		sscanf(line, "%f", (rel+lcount));
+		lcount++;
+	}
+	fclose(relfile);
+}
+
+void freepattern() {
+	free(rel);
+	rel = NULL;
 }
 
 void transpattvec(float *vec) {
-	// Need to set z component to zero. 
 	float temp[3];
+	// Need to set z component to zero. 
 	*(vec+2) = 0.0f;
+	//printf("pat: %f, %f, %f ", *vec, *(vec+1), *(vec+2));
 	fmatxvec((float *) pattrans, vec, temp);
 	*(vec) = temp[0] + patpos[0];
 	*(vec+1) = temp[1] + patpos[1];
 	*(vec+2) = temp[2] + patpos[2];
+	//printf("glo: %f, %f, %f\n", *vec, *(vec+1), *(vec+2));
 }
 
-float getdist(const uint32 *rgb, const float pdist) {
+float getdist(const uint32 *rgb, const float pdist, const int orien) {
 	// Might like to think of not changing pdist if we get a grey pixel.
-	float shift = hueshift(gethue(rgb));
+	float shift = hueshift(gethue(rgb), orien);
 	float pshift = fmodf(pdist, segsize);
 	//printf("s, ps, %f, %f\n", shift, pshift);
 
@@ -76,9 +96,15 @@ float gethue(const uint32 *rgb) {
 	return hue;
 }
 
-float hueshift(float hue) {
+float hueshift(const float hue, const int orien) {
 	// MIGHT NEED TO CHECK....
 	int indice = (int) roundf(hue*relbins);
+
 	if (indice == relbins) indice = 0;
-	return segsize*(*(rel+indice));
+	// Need to reverse relation depending on orientation.
+	if (orien) {
+		return segsize*(*(rel+indice));
+	} else {
+		return segsize*(1.0f-(*(rel+indice)));
+	}
 }

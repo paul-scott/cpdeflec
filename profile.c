@@ -3,14 +3,17 @@
 /* Mirror parameters
  * *****************
  */
-static float dotsize = 12.0f; // Physiscal size of reference of dots in mm
-static float dotsep[3] = {1200.0f,1697.056f,1200.0f}; // Distance between
-// TL-BL, BL-TR, TR-TL
-static float corns[4][3] = {{35.0f,35.0f,50.0f},{35.0f,1035.0f,50.0f},
-	{1035.0f,1035.0f,50.0f},{1035.0f,35.0f,50.0f}}; // Mirror boundary corners:
+static float dotsize = 7.0f; // Physiscal size of reference of dots in mm
+static float dotsep[3] = {1192.8986f,1745.6891f,1271.5304f}; // Distance
+// between TL-BL, BL-TR, TR-TL
+static float corns[4][3] = {{61.010941f,17.819132f,-24.028367f},
+	{61.010941f,1167.8191f,-24.028367f},
+	{1211.0109f,1167.8191f,-24.028367f},
+	{1211.0109f,17.819132f,-24.028367f}}; // Mirror boundary corners:
 // TL, BL, BR, TR
-static float camdistguess = 2500.0f; // Guess of distance from mirror to camera
-static float startdepth = 40.0f; // Height of starting point.
+static float camdistguess = 3000.0f; // Guess of distance from mirror to camera
+static float startdepth = -24.028367f; // Height of starting point.
+static char *relfn = "huerel.csv";
 
 /* LOCAL FUNCTIONS
  * ***************
@@ -65,7 +68,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 
 	// Might want to move but initcamera needs to be run.
 	initcamera();
-	initpattern();
+	initpattern(relfn);
 
 	image = TIFFOpen(imfnh, "r");
 	if (image == NULL) {
@@ -308,10 +311,30 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	_TIFFfree(imdata);
 	imdata = NULL;
 
+	// Printing out a selection of pattvecs.
+	int noselec = 5;
+	for (int y=0; y<ylen; y=y+ylen/noselec) {
+		for (int x=0; x<xlen; x=x+xlen/noselec) {
+			printf("(%f,%f,%f), ", *(vecs+(y*xlen+x)*3),
+					*(vecs+(y*xlen+x)*3+1), *(vecs+(y*xlen+x)*3+2));
+		}
+		printf("\n");
+	}
+
+	// Need to now find best fitting curve.
+	// And fit ideal curve.
+
 	// Piece together pattern vector components and transform into global
 	// coordinates.
 	transformpatt(vecs, xlen, ybound);
 	printf("Pattern vectors translated to global coords.\n");
+	for (int y=0; y<ylen; y=y+ylen/noselec) {
+		for (int x=0; x<xlen; x=x+xlen/noselec) {
+			printf("(%f,%f,%f), ", *(vecs+(y*xlen+x)*3),
+					*(vecs+(y*xlen+x)*3+1), *(vecs+(y*xlen+x)*3+2));
+		}
+		printf("\n");
+	}
 
 	// Set up array of vectors to hold pattern positions. Later on it holds
 	// normal vectors.
@@ -328,33 +351,42 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	solvesurface(vecs, poss, xlen, pxcorns, ybound, offset, startdepth);
 	printf("Surface solved.\n");
 
+	// Printing out a selection of points.
+	for (int y=0; y<ylen; y=y+ylen/noselec) {
+		for (int x=0; x<xlen; x=x+xlen/noselec) {
+			printf("(%f,%f,%f), ", *(poss+(y*xlen+x)*3),
+					*(poss+(y*xlen+x)*3+1), *(poss+(y*xlen+x)*3+2));
+		}
+		printf("\n");
+	}
+
 	// Need to now find best fitting curve.
 	// And fit ideal curve.
-	// Ideal curve fitting:
-	float *idealcurves = malloc(2*sizeof(*idealcurves));
-	*idealcurves = 3.3098f;
-	*(idealcurves+1) = 3.3098f;
-	//Errparams idealpars = {&fixedparab, poss, xlen, ybound, idealcurves};
-	Errparams idealpars;
-	idealpars.f = &fixedparab;
-	idealpars.poss = poss;
-	idealpars.xlen = xlen;
-	idealpars.yb = ybound;
-	idealpars.fpars = idealcurves;
-	gsl_vector *idealvars = gsl_vector_alloc(3);
+
+	// Finding best fitting sphere.
+	Errparams sphfitpars = {&sphere, poss, xlen, ybound, NULL};
+	gsl_vector *sphfitvars = gsl_vector_alloc(4);
 	// Setting starting point.
-	gsl_vector_set(idealvars, 0, 500.0);
-	gsl_vector_set(idealvars, 1, 500.0);
-	gsl_vector_set(idealvars, 1, -40.0);
+	gsl_vector_set(sphfitvars, 0, 500.0); // x0
+	gsl_vector_set(sphfitvars, 1, 500.0); // y0
+	gsl_vector_set(sphfitvars, 2, -40.0); // z0 shift (radius accounted)
+	gsl_vector_set(sphfitvars, 3, 30000.0); // Radius
+
+	// Step size for first trial.
+	gsl_vector *sphstep = gsl_vector_alloc(4);
+	gsl_vector_set(sphstep, 0, 500.0);
+	gsl_vector_set(sphstep, 1, 500.0);
+	gsl_vector_set(sphstep, 2, 100.0);
+	gsl_vector_set(sphstep, 3, 5000.0);
 
 	// Fitting ideal curve to data.
-	minerror(&idealpars, 3, idealvars);
+	minerror(&sphfitpars, 4, sphfitvars, sphstep);
 
-	free(idealcurves);
-	idealcurves = NULL;
+	gsl_vector_free(sphstep);
+	sphstep = NULL;
 
-	gsl_vector_free(idealvars);
-	idealvars = NULL;
+	gsl_vector_free(sphfitvars);
+	sphfitvars = NULL;
 
 	// Then calculate slope errors against best fitting curve and ideal curve.
 
@@ -369,6 +401,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	poss = NULL;
 
 	freecamera();
+	freepattern();
 }
 
 void extractcalib(FILE *file) {
@@ -383,13 +416,13 @@ void calcpattvecs(const uint32 *im, const int iw, float *vecs, const int bw,
 
 	// Working out first point.
 	*(vecs+((*(ipix+1))*bw+*ipix)*3+orien) = getdist((im+(*(ipix+1)+
-									*(offs+1))*iw+*(ipix)+*offs), idist);
+									*(offs+1))*iw+*(ipix)+*offs), idist, orien);
 	// Run down first column, shouldn't need to go up since at corner.
 	for (int y=*(ipix+1)+1; y<=*(yb+(*ipix)*2+1); y++) {
 		// Using previously calculated distance.
 		float pdist = *(vecs+((y-1)*bw+*ipix)*3+orien);
 		*(vecs+(y*bw+*ipix)*3+orien) = getdist((im+(y+*(offs+1))*iw+*(ipix)+
-									*offs), pdist);
+									*offs), pdist, orien);
 	}
 
 	// Work our way left.
@@ -399,7 +432,7 @@ void calcpattvecs(const uint32 *im, const int iw, float *vecs, const int bw,
 		// Determining distance for starting point.
 		float pdist = *(vecs+(iy*bw+x+1)*3+orien);
 		*(vecs+(iy*bw+x)*3+orien) = getdist((im+(iy+*(offs+1))*iw+x+*offs),
-										pdist);
+										pdist, orien);
 		// Shouldn't need to move up.
 
 		// Working down.
@@ -420,7 +453,7 @@ void calcpattvecs(const uint32 *im, const int iw, float *vecs, const int bw,
 			pdist = pdist/count; // Normalizing
 
 			*(vecs+(y*bw+x)*3+orien) = getdist((im+(y+*(offs+1))*iw+x+*offs),
-										pdist);
+										pdist, orien);
 		}
 	}
 
@@ -431,7 +464,7 @@ void calcpattvecs(const uint32 *im, const int iw, float *vecs, const int bw,
 		// Determining distance for starting point.
 		float pdist = *(vecs+(iy*bw+x-1)*3+orien);
 		*(vecs+(iy*bw+x)*3+orien) = getdist((im+(iy+*(offs+1))*iw+x+*offs),
-										pdist);
+										pdist, orien);
 		// Working up.
 		for (int y=iy-1; y>=*(yb+x*2); y--) {
 			int count = 1;
@@ -450,7 +483,7 @@ void calcpattvecs(const uint32 *im, const int iw, float *vecs, const int bw,
 			pdist = pdist/count; // Normalizing
 
 			*(vecs+(y*bw+x)*3+orien) = getdist((im+(y+*(offs+1))*iw+x+*offs),
-										pdist);
+										pdist, orien);
 		}
 		// Working down.
 		for (int y=iy+1; y<=*(yb+x*2+1); y++) {
@@ -470,7 +503,7 @@ void calcpattvecs(const uint32 *im, const int iw, float *vecs, const int bw,
 			pdist = pdist/count; // Normalizing
 
 			*(vecs+(y*bw+x)*3+orien) = getdist((im+(y+*(offs+1))*iw+x+*offs),
-										pdist);
+										pdist, orien);
 		}
 	}
 }
@@ -673,12 +706,12 @@ void centroid(uint32 *im, uint32 w, uint32 h, int *idot, float *dot,
 	float *region; // Region of pixels about dot guess
 	int regw, regh; // Region width and height
 
-	// Finding the region boundaries which are 3 times dot size either side.
+	// Finding the region boundaries which are 2 times dot size either side.
 	// Define x along width and y along height.
-	int lowx = *(idot) - 3*dotpx;
-	int highx = *(idot) + 3*dotpx;
-	int lowy = *(idot+1) - 3*dotpx;
-	int highy = *(idot+1) + 3*dotpx;
+	int lowx = *(idot) - 2*dotpx;
+	int highx = *(idot) + 2*dotpx;
+	int lowy = *(idot+1) - 2*dotpx;
+	int highy = *(idot+1) + 2*dotpx;
 	float backgr = 0.0f;
 	float weight = 0.0f;
 	float xmean = 0.0f;
@@ -753,13 +786,13 @@ int main() {
 	printf("Starting...\n");
 	printf("%f, %f\n", tick-boom, boom-tick);
 
-	*(idots) = 934;
-	*(idots+1) = 332;
-	*(idots+2) = 942;
-	*(idots+3) = 2542;
-	*(idots+4) = 3143;
-	*(idots+5) = 335;
-	solveprofile("./120199-h.tiff", "./120199-v.tiff", idots, "out", "cal");
+	*(idots) = 1131;
+	*(idots+1) = 671;
+	*(idots+2) = 1122;
+	*(idots+3) = 2342;
+	*(idots+4) = 2623;
+	*(idots+5) = 817;
+	solveprofile("./130000-h.tiff", "./130000-v.tiff", idots, "out", "cal");
 	free(idots);
 
 	return 0;

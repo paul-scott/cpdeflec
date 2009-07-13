@@ -20,6 +20,9 @@ typedef struct {
 
 double fixedparab(const float x, const float y, const gsl_vector *vars,
 		const float *as);
-void minerror(const Errparams *pars, const size_t n, gsl_vector *vars);
+double sphere(const float x, const float y, const gsl_vector *vars,
+		const float *as);
+void minerror(const Errparams *pars, const size_t n, gsl_vector *vars,
+		const gsl_vector *stepsize);
 
 #endif /* INC_FITTING_H */

@@ -18,18 +18,31 @@ double sqerr(const gsl_vector *vars, void *params) {
 }
 
 // This function only works for a fixed curvature paraboloid...
+// NEED ROTATIONS 4 THIS.
 double fixedparab(const float x, const float y, const gsl_vector *vars,
 		const float *as) {
 	// Negatives used because needs to be upside down...
+	// Could perhaps speed up by removing pow function.
 	return -pow((x-gsl_vector_get(vars,0))/(*as),2.0) -
 			pow((y-gsl_vector_get(vars,1))/(*(as+1)),2.0) +
 			gsl_vector_get(vars,2);
 }
 
-void minerror(const Errparams *pars, const size_t n, gsl_vector *vars) {
+
+double sphere(const float x, const float y, const gsl_vector *vars,
+		const float *as) {
+	// Need to make sure that region dosen't drift outside radius of circle.
+	// z shifted accounting to radius.
+	return sqrt(pow(gsl_vector_get(vars,3),2.0) -
+			pow(x-gsl_vector_get(vars,0),2.0) -
+			pow(y-gsl_vector_get(vars,1),2.0)) - gsl_vector_get(vars,3) +
+			gsl_vector_get(vars,2);
+}
+
+void minerror(const Errparams *pars, const size_t n, gsl_vector *vars,
+		const gsl_vector *stepsize) {
 	gsl_multimin_fminimizer *minzer;
 	gsl_multimin_function multifunc;
-	gsl_vector *stepsize;
 	// Allocate memory for minimizer and set to nelder-mead simplex.
 	minzer = gsl_multimin_fminimizer_alloc(gsl_multimin_fminimizer_nmsimplex2,
 			n);
@@ -43,9 +56,6 @@ void minerror(const Errparams *pars, const size_t n, gsl_vector *vars) {
 	multifunc.f = &sqerr;
 	multifunc.params = (void *) pars;
 
-	// Step size for first trail.
-	stepsize = gsl_vector_alloc(n);
-	gsl_vector_set_all(stepsize, 10.0);
 
 	gsl_multimin_fminimizer_set(minzer, &multifunc, vars, stepsize);
 
@@ -76,8 +86,6 @@ void minerror(const Errparams *pars, const size_t n, gsl_vector *vars) {
 		gsl_vector_set(vars, i, gsl_vector_get(minzer->x, i));
 	}
 
-	gsl_vector_free(stepsize);
-	stepsize = NULL;
 	gsl_multimin_fminimizer_free(minzer);
 	minzer = NULL;
 }

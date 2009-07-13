@@ -18,7 +18,7 @@ typedef struct {
 // Can probably pull w and h in from profile.c:
 static int camdims[2] = {4288,2848}; // Width and height of CCD array in pixels
 static float pxsize = 0.00554f; // Size of a pixel in mm
-static float prdist = 20.52f; // Pricipal distance of camera lens in mm
+static float prdist = 20.53f; // Pricipal distance of camera lens in mm
 static float prpoint[2] = {0.1065f,-0.2374f}; // Pricipal point in mm
 
 float campos[3] = {0.0f,0.0f,0.0f};
@@ -217,6 +217,7 @@ void findpix(const float *vec, int *pix) {
 	pos = NULL;
 
 	// Position on array from optical centre.
+	// Might want to round here...
 	fscale(-prdist/(*(dir+2)), dir);
 	printf("%f, %f, %f\n", *(dir), *(dir+1), *(dir+2));
 	*(pix) = (int) ((*(dir) - prpoint[0])/pxsize + camdims[0]/2.0f - 0.5f);
