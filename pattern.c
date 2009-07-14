@@ -9,9 +9,9 @@
 static float patpos[3] = {635.78213f,-364.31177f,-2334.4997f}; // Pos of
 // pattern corner
 // NOTE MIGHT WANT TO WORK ON NON ORTHOGONAL VECTORS.
-static float pattrans[3][3] = {{0.8542370f,0.0015481f,0.5198815f},
-	{0.0018613f,0.9999801f,-0.0060361f},
-	{-0.5198805f,0.0061239f,0.8542171f}}; // Coordinate system translation
+static float pattrans[3][3] = {{0.8542370f,0.0018613f,-0.5198805f},
+	{0.0015481f,0.9999801f,0.0061239f},
+	{0.5198815f,-0.0060361f,0.8542171f}}; // Coordinate system translation
 float segsize = 47.7f; // Width of repeating pattern segment
 static int relbins = 274;
 static float *rel;

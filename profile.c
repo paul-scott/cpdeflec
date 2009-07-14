@@ -328,13 +328,6 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	// coordinates.
 	transformpatt(vecs, xlen, ybound);
 	printf("Pattern vectors translated to global coords.\n");
-	for (int y=0; y<ylen; y=y+ylen/noselec) {
-		for (int x=0; x<xlen; x=x+xlen/noselec) {
-			printf("(%f,%f,%f), ", *(vecs+(y*xlen+x)*3),
-					*(vecs+(y*xlen+x)*3+1), *(vecs+(y*xlen+x)*3+2));
-		}
-		printf("\n");
-	}
 
 	// Set up array of vectors to hold pattern positions. Later on it holds
 	// normal vectors.
@@ -352,12 +345,9 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	printf("Surface solved.\n");
 
 	// Printing out a selection of points.
-	for (int y=0; y<ylen; y=y+ylen/noselec) {
-		for (int x=0; x<xlen; x=x+xlen/noselec) {
-			printf("(%f,%f,%f), ", *(poss+(y*xlen+x)*3),
-					*(poss+(y*xlen+x)*3+1), *(poss+(y*xlen+x)*3+2));
-		}
-		printf("\n");
+	for (int y=0; y<ylen; y=y+ylen/20) {
+		printf("%f, %f, %f\n", *(poss+(y*xlen+500)*3),
+				*(poss+(y*xlen+500)*3+1), *(poss+(y*xlen+500)*3+2));
 	}
 
 	// Need to now find best fitting curve.
@@ -369,7 +359,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	// Setting starting point.
 	gsl_vector_set(sphfitvars, 0, 500.0); // x0
 	gsl_vector_set(sphfitvars, 1, 500.0); // y0
-	gsl_vector_set(sphfitvars, 2, -40.0); // z0 shift (radius accounted)
+	gsl_vector_set(sphfitvars, 2, -10.0); // z0 shift (radius accounted)
 	gsl_vector_set(sphfitvars, 3, 30000.0); // Radius
 
 	// Step size for first trial.
@@ -518,6 +508,8 @@ void transformpatt(float *vecs, const int bw, const int* yb) {
 
 void solvesurface(float *vecs, float *poss, const int bw, const int *ipix,
 		const int *yb, const int *offs, const float idepth) {
+	// After position and norm estimated, could redo extrapolation taking,
+	// into account the estimated norm.
 	float ch[3]; // Direction from camera to point
 	float ph[3]; // Direction from pattern to point
 	// Calculating direction from camera to point.

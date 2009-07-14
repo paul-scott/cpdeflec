@@ -80,7 +80,7 @@ void minerror(const Errparams *pars, const size_t n, gsl_vector *vars,
 		}
 		printf("f() = %7.3f size = %.3f\n", minzer->fval, size);
 		iter++;
-	} while (status == GSL_CONTINUE && iter < 100);
+	} while (status == GSL_CONTINUE && iter < 400);
 
 	for (int i=0; i<n; i++) {
 		gsl_vector_set(vars, i, gsl_vector_get(minzer->x, i));
