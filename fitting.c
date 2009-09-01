@@ -1,50 +1,88 @@
 #include "fitting.h"
 
-double sqerr(const gsl_vector *vars, void *params) {
+double sphesqerr(const gsl_vector *vars, void *params) {
+	// vars = xoff, yoff, zoff, rad;
 	const Errparams *par = (Errparams *) params;
 	float *poss = par->poss;
 	int xlen = par->xlen;
 	int *yb = par->yb;
 	double err = 0.0f;
 
-	for (int x=0; x<xlen; x++) {
-		for (int y=*(yb+x*2); y<=*(yb+x*2+1); y++) {
-			err = err + pow(*(poss+(y*xlen+x)*3+2) -
-					(par->f)(*(poss+(y*xlen+x)*3), *(poss+(y*xlen+x)*3+1),
-						vars, par->fpars),2.0);
+	for (int x=0; x<xlen; x=x+xlen/50) {
+		for (int y=*(yb+x*2); y<=*(yb+x*2+1); y=y+xlen/50) {
+			err = err + pow((double) (*(poss+(y*xlen+x)*3+2) -
+						gsl_vector_get(vars, 2) + gsl_vector_get(vars, 3) -
+						sphere(*(poss+(y*xlen+x)*3) - gsl_vector_get(vars, 0),
+							*(poss+(y*xlen+x)*3+1) - gsl_vector_get(vars, 1),
+							gsl_vector_get(vars, 3))),2.0);
 		}
 	}
 	return err;
 }
 
-// This function only works for a fixed curvature paraboloid...
-// NEED ROTATIONS 4 THIS.
-double fixedparab(const float x, const float y, const gsl_vector *vars,
-		const float *as) {
-	// Negatives used because needs to be upside down...
-	// Could perhaps speed up by removing pow function.
-	return -pow((x-gsl_vector_get(vars,0))/(*as),2.0) -
-			pow((y-gsl_vector_get(vars,1))/(*(as+1)),2.0) +
-			gsl_vector_get(vars,2);
+double parabsqerr(const gsl_vector *vars, void *params) {
+	// vars = xoff, yoff, zoff, xrot, yrot, zrot, xa, ya;
+	const Errparams *par = (Errparams *) params;
+	float *poss = par->poss;
+	int xlen = par->xlen;
+	int *yb = par->yb;
+	double err = 0.0f;
+	float *rotm = malloc(9*sizeof(*rotm));
+	float tvec1[3];
+	float tvec2[3];
+	// Work out rotations matrix.
+	rotmatxyz((float) gsl_vector_get(vars, 3), (float) gsl_vector_get(vars, 4),
+			(float) gsl_vector_get(vars, 5), rotm);
+
+	for (int x=0; x<xlen; x=x+xlen/50) {
+		for (int y=*(yb+x*2); y<=*(yb+x*2+1); y=y+xlen/50) {
+			// Wait need to subtract offset from vec...
+			tvec1[0] = (float) (*(poss+(y*xlen+x)*3) - gsl_vector_get(vars, 0));
+			tvec1[1] = (float) (*(poss+(y*xlen+x)*3+1) -
+				gsl_vector_get(vars, 1));
+			tvec1[2] = (float) (*(poss+(y*xlen+x)*3+2) -
+				gsl_vector_get(vars, 2));
+			// Apply rotations.
+			fmatxvec(rotm, tvec1, tvec2);
+			// + sign since paraboloid needs to be upside down.
+			err = err + pow((double) (tvec2[2] +
+					paraboloid((double) tvec2[0], (double) tvec2[1],
+					gsl_vector_get(vars, 6),
+					gsl_vector_get(vars, 7))),2.0);
+		}
+	}
+	free(rotm);
+	rotm = NULL;
+	return err;
 }
 
 
-double sphere(const float x, const float y, const gsl_vector *vars,
-		const float *as) {
+double paraboloid(const double x, const double y, const double a,
+		const double b) {
+	// a, b is 2*foclen.
+	return x*x/(2*a) + y*y/(2*b);
+}
+
+double sphere(const double x, const double y, const double rad) {
 	// Need to make sure that region dosen't drift outside radius of circle.
-	// z shifted accounting to radius.
-	return sqrt(pow(gsl_vector_get(vars,3),2.0) -
-			pow(x-gsl_vector_get(vars,0),2.0) -
-			pow(y-gsl_vector_get(vars,1),2.0)) - gsl_vector_get(vars,3) +
-			gsl_vector_get(vars,2);
+	return sqrt(rad*rad - x*x -	y*y);
 }
 
-void minerror(const Errparams *pars, const size_t n, gsl_vector *vars,
+void sphereslope(const float x, const float y, const float rad, float *nrm) {
+	// Normal is equal to sphere centre minus sphere location.
+	*nrm = -x;
+	*(nrm+1) = -y;
+	*(nrm+2) = -sqrtf(rad*rad - x*x - y*y);
+	fscale(1.0f/fnorm(nrm), nrm);
+}
+
+void minerror(double (*f)(const gsl_vector *va, void *params),
+		const Errparams *pars, const size_t n, gsl_vector *vars,
 		const gsl_vector *stepsize) {
 	gsl_multimin_fminimizer *minzer;
 	gsl_multimin_function multifunc;
 	// Allocate memory for minimizer and set to nelder-mead simplex.
-	minzer = gsl_multimin_fminimizer_alloc(gsl_multimin_fminimizer_nmsimplex2,
+	minzer = gsl_multimin_fminimizer_alloc(gsl_multimin_fminimizer_nmsimplex,
 			n);
 	if (minzer == NULL) {
 		printf("Cannot allocate memory for curve fitting...");
@@ -53,7 +91,7 @@ void minerror(const Errparams *pars, const size_t n, gsl_vector *vars,
 
 	// Set up multifunc.
 	multifunc.n = n;
-	multifunc.f = &sqerr;
+	multifunc.f = f;
 	multifunc.params = (void *) pars;
 
 
@@ -80,7 +118,7 @@ void minerror(const Errparams *pars, const size_t n, gsl_vector *vars,
 		}
 		printf("f() = %7.3f size = %.3f\n", minzer->fval, size);
 		iter++;
-	} while (status == GSL_CONTINUE && iter < 400);
+	} while (status == GSL_CONTINUE && iter < 2000);
 
 	for (int i=0; i<n; i++) {
 		gsl_vector_set(vars, i, gsl_vector_get(minzer->x, i));

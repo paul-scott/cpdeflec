@@ -19,7 +19,8 @@ typedef struct {
 static int camdims[2] = {4288,2848}; // Width and height of CCD array in pixels
 static float pxsize = 0.00554f; // Size of a pixel in mm
 static float prdist = 20.53f; // Pricipal distance of camera lens in mm
-static float prpoint[2] = {0.1065f,-0.2374f}; // Pricipal point in mm
+static float prpoint[2] = {0.1065f,0.2374f}; // Pricipal point in mm
+// Take negative of vms y component.
 
 float campos[3] = {0.0f,0.0f,0.0f};
 static float *camtrans;
@@ -151,7 +152,7 @@ int locatecam(float *dots, float *dotsep, float distguess) {
 
 	printf("campos: %f, %f, %f\n", *campos, *(campos+1), *(campos+2));
 
-	// Caluclate inverse camera transform.
+	// Calculate inverse camera transform.
 	gsl_matrix *ctran = gsl_matrix_alloc(3,3);
 	gsl_matrix *cinvtran = gsl_matrix_alloc(3,3);
 	gsl_permutation *perm = gsl_permutation_alloc(3);
@@ -220,8 +221,8 @@ void findpix(const float *vec, int *pix) {
 	// Might want to round here...
 	fscale(-prdist/(*(dir+2)), dir);
 	printf("%f, %f, %f\n", *(dir), *(dir+1), *(dir+2));
-	*(pix) = (int) ((*(dir) - prpoint[0])/pxsize + camdims[0]/2.0f - 0.5f);
-	*(pix+1) = (int) ((*(dir+1) - prpoint[1])/pxsize + camdims[1]/2.0f - 0.5f);
+	*(pix) = (int) ((*(dir) + prpoint[0])/pxsize + camdims[0]/2.0f - 0.5f);
+	*(pix+1) = (int) ((*(dir+1) + prpoint[1])/pxsize + camdims[1]/2.0f - 0.5f);
 
 	free(dir);
 	dir = NULL;
@@ -232,8 +233,8 @@ void finddirpix(const int x, const int y, float *dir) {
 	// Similar to finddirpixcam except it works on integers and transforms
 	// the direction vector to global coords.
 	float temp[3];
-	temp[0] = -(pxsize*(x - *(camdims)/2.0f + 0.5f) + *(prpoint));
-	temp[1] = -(pxsize*(y - *(camdims+1)/2.0f + 0.5f) + *(prpoint+1));
+	temp[0] = -(pxsize*(x - *(camdims)/2.0f + 0.5f) - *(prpoint));
+	temp[1] = -(pxsize*(y - *(camdims+1)/2.0f + 0.5f) - *(prpoint+1));
 	temp[2] = prdist;
 	// Normalizing vector.
 	fscale(1.0f/fnorm(temp),temp);
@@ -250,8 +251,8 @@ void finddirpixcam(const float *pix, float *dir) {
 	 * Signs used here to get the direction right. Reverse signs and we
 	 * get position of pixel in the array from optical centre.
 	 */
-	*(dir) = -(pxsize*(*(pix) - *(camdims)/2.0f + 0.5f) + *(prpoint));
-	*(dir+1) = -(pxsize*(*(pix+1) - *(camdims+1)/2.0f + 0.5f) + *(prpoint+1));
+	*(dir) = -(pxsize*(*(pix) - *(camdims)/2.0f + 0.5f) - *(prpoint));
+	*(dir+1) = -(pxsize*(*(pix+1) - *(camdims+1)/2.0f + 0.5f) - *(prpoint+1));
 	*(dir+2) = prdist;
 	// Normalizing vector.
 	fscale(1.0f/fnorm(dir),dir);

@@ -60,7 +60,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 		*(idots+3), *(idots+4), *(idots+5));
 	// Load in and extract parameters from calibration file if supplied.
 	// Need to check if "" in python gives NULL pointer.
-	if (outfn != NULL) {
+	if (calbfn != NULL) {
 		FILE *file = fopen(calbfn, "r");
 		if (file != NULL) extractcalib(file);
 		else printf("Error loading calibration file. Using defaults...\n");	
@@ -311,16 +311,6 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	_TIFFfree(imdata);
 	imdata = NULL;
 
-	// Printing out a selection of pattvecs.
-	int noselec = 5;
-	for (int y=0; y<ylen; y=y+ylen/noselec) {
-		for (int x=0; x<xlen; x=x+xlen/noselec) {
-			printf("(%f,%f,%f), ", *(vecs+(y*xlen+x)*3),
-					*(vecs+(y*xlen+x)*3+1), *(vecs+(y*xlen+x)*3+2));
-		}
-		printf("\n");
-	}
-
 	// Need to now find best fitting curve.
 	// And fit ideal curve.
 
@@ -344,17 +334,10 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	solvesurface(vecs, poss, xlen, pxcorns, ybound, offset, startdepth);
 	printf("Surface solved.\n");
 
-	// Printing out a selection of points.
-	for (int y=0; y<ylen; y=y+ylen/20) {
-		printf("%f, %f, %f\n", *(poss+(y*xlen+500)*3),
-				*(poss+(y*xlen+500)*3+1), *(poss+(y*xlen+500)*3+2));
-	}
-
-	// Need to now find best fitting curve.
 	// And fit ideal curve.
 
 	// Finding best fitting sphere.
-	Errparams sphfitpars = {&sphere, poss, xlen, ybound, NULL};
+	Errparams fitpars = {poss, xlen, ybound, NULL};
 	gsl_vector *sphfitvars = gsl_vector_alloc(4);
 	// Setting starting point.
 	gsl_vector_set(sphfitvars, 0, 500.0); // x0
@@ -370,15 +353,150 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	gsl_vector_set(sphstep, 3, 5000.0);
 
 	// Fitting ideal curve to data.
-	minerror(&sphfitpars, 4, sphfitvars, sphstep);
+	minerror(&sphesqerr, &fitpars, 4, sphfitvars, sphstep);
+/*
+	// ALTERING DATA TO SEE IF PARABOLOID FITTING CORRECTLY.
+	for (int x=0; x<xlen; x++) {
+		for (int y=*(ybound+x*2); y<=*(ybound+x*2+1); y++) {
+			*(poss+(y*xlen+x)*3+2) = (float) -paraboloid(*(poss+(y*xlen+x)*3) -
+					500.0, *(poss+(y*xlen+x)*3+1) - 700.0, 6.0, 7.0);
+		}
+	}
+*/
+
+	/*
+	// Need to now find best fitting curve.
+	gsl_vector *parfitvars = gsl_vector_alloc(8);
+	// Setting starting point, using offsets found in sphere fitting.
+	gsl_vector_set(parfitvars, 0, gsl_vector_get(sphfitvars, 0)); // x0
+	gsl_vector_set(parfitvars, 1, gsl_vector_get(sphfitvars, 1)); // y0
+	gsl_vector_set(parfitvars, 2, gsl_vector_get(sphfitvars, 2)); // z0 shift
+	gsl_vector_set(parfitvars, 3, 0.0); // xrot
+	gsl_vector_set(parfitvars, 4, 0.0); // yrot
+	gsl_vector_set(parfitvars, 5, 0.0); // zrot
+	gsl_vector_set(parfitvars, 6, 30.0); // a
+	gsl_vector_set(parfitvars, 7, 30.0); // b
+
+	// Step size for first trial.
+	gsl_vector *parstep = gsl_vector_alloc(8);
+	gsl_vector_set(parstep, 0, 500.0);
+	gsl_vector_set(parstep, 1, 500.0);
+	gsl_vector_set(parstep, 2, 50.0);
+	gsl_vector_set(parstep, 3, PI/18.0);
+	gsl_vector_set(parstep, 4, PI/18.0);
+	gsl_vector_set(parstep, 5, PI/2.0);
+	gsl_vector_set(parstep, 6, 10.0);
+	gsl_vector_set(parstep, 7, 10.0);
+
+	// Fitting best fitting curve to data.
+	//minerror(&parabsqerr, &fitpars, 8, parfitvars, parstep);
+
+	*/
+	printf("%f, %f, %f, %f\n", gsl_vector_get(sphfitvars, 0),
+			gsl_vector_get(sphfitvars, 1),
+			gsl_vector_get(sphfitvars, 2),
+			gsl_vector_get(sphfitvars, 3));
+	/*printf("%f, %f, %f, %f, %f, %f, %f, %f\n", gsl_vector_get(parfitvars, 0),
+			gsl_vector_get(parfitvars, 1),
+			gsl_vector_get(parfitvars, 2),
+			gsl_vector_get(parfitvars, 3),
+			gsl_vector_get(parfitvars, 4),
+			gsl_vector_get(parfitvars, 5),
+			gsl_vector_get(parfitvars, 6),
+			gsl_vector_get(parfitvars, 7));
+*/
+	// Then calculate slope errors against best fitting curve and ideal curve.
+
+	// Calculating slope errors relative to sphere.
+	
+	size_t pointc = 0;
+	float *inorm = malloc(3*sizeof(*inorm)); // Ideal normal
+	float mux = 0.0f; // Slope error mean
+	float muy = 0.0f; // Slope error mean
+	float *locx = malloc(3*sizeof(*locx));
+	float *locy = malloc(3*sizeof(*locy));
+	float xaxis[3] = {1.0f, 0.0f, 0.0f};
+	for (int px=0; px<xlen; px++) {
+		for (int py=*(ybound+px*2); py<=*(ybound+px*2+1); py++) {
+			// Work out ideal normal for x and y coords of given pixel.
+			sphereslope((float) (*(poss+(py*xlen+px)*3)
+					- gsl_vector_get(sphfitvars, 0)),
+				(float) (*(poss+(py*xlen+px)*3+1)
+					- gsl_vector_get(sphfitvars, 1)),
+				(float) gsl_vector_get(sphfitvars, 3), inorm);
+			// Take cross product of inorm with global x axis to produce locy.
+			fcross(xaxis, inorm, locy);
+			fcross(locy, inorm, locx);
+			
+			// Working out local x and y components of surface norm.
+			float epsx = fdot(locx, (vecs+(py*xlen+px)*3));
+			float epsy = fdot(locy, (vecs+(py*xlen+px)*3));
+
+			// For now just save in vecs.
+			*(vecs+(py*xlen+px)*3) = epsx;
+			*(vecs+(py*xlen+px)*3+1) = epsy;
+			*(vecs+(py*xlen+px)*3+2) = 0.0f;
+			
+			mux = mux + epsx;
+			muy = muy + epsy;
+			pointc++;
+		}
+	}
+	free(inorm);
+	inorm = NULL;
+	free(locx);
+	locx = NULL;
+	free(locy);
+	locy = NULL;
+	mux = mux/pointc;
+	muy = muy/pointc;
+	float sigx = 0.0f;
+	float sigy = 0.0f;
+	for (int px=0; px<xlen; px++) {
+		for (int py=*(ybound+px*2); py<=*(ybound+px*2+1); py++) {
+			sigx = sigx + powf((*(vecs+(py*xlen+px)*3)-mux), 2.0f);
+			sigy = sigy + powf((*(vecs+(py*xlen+px)*3+1)-muy), 2.0f);
+		}
+	}
+	sigx =  sqrtf(sigx/(pointc-1));
+	sigy =  sqrtf(sigy/(pointc-1));
+	printf("Slope errors for sphere: %f, %f, %f, %f\n", mux, muy, sigx, sigy); 
+	
+	// Saving to file selection of points.
+	FILE *savefile = fopen(outfn, "w");
+	if (savefile == NULL) {
+		printf("Error opening save file\n");	
+		exit(1);
+	}
+	for (int x=0; x<xlen; x=x+xlen/100) {
+		for (int y=*(ybound+x*2); y<=*(ybound+x*2+1); y=y+xlen/100) {
+			fprintf(savefile, "%10.3e, %10.3e, %10.3e\n", *(poss+(y*xlen+x)*3),
+				*(poss+(y*xlen+x)*3+1), *(poss+(y*xlen+x)*3+2));
+		}
+	}
+	fclose(savefile);
+	savefile = fopen("../images/lesserout.csv", "w");
+	if (savefile == NULL) {
+		printf("Error opening save file\n");	
+		exit(1);
+	}
+	for (int x=0; x<xlen; x=x+xlen/40) {
+		for (int y=*(ybound+x*2); y<=*(ybound+x*2+1); y=y+xlen/40) {
+			fprintf(savefile, "%10.3e, %10.3e, %10.3e\n", *(poss+(y*xlen+x)*3),
+				*(poss+(y*xlen+x)*3+1), *(poss+(y*xlen+x)*3+2));
+		}
+	}
+	fclose(savefile);
+	savefile = NULL;
 
 	gsl_vector_free(sphstep);
 	sphstep = NULL;
-
 	gsl_vector_free(sphfitvars);
 	sphfitvars = NULL;
-
-	// Then calculate slope errors against best fitting curve and ideal curve.
+	//gsl_vector_free(parstep);
+	//parstep = NULL;
+	//gsl_vector_free(parfitvars);
+	//parfitvars = NULL;
 
 	free(pxcorns);
 	pxcorns = NULL;
@@ -774,17 +892,19 @@ int main() {
 	// python.
 	float tick = 50.0f;
 	float boom = 100.0f;
-	int *idots = malloc(3*2*sizeof(idots));
+	int *idots = malloc(3*2*sizeof(*idots));
 	printf("Starting...\n");
 	printf("%f, %f\n", tick-boom, boom-tick);
 
-	*(idots) = 1131;
-	*(idots+1) = 671;
-	*(idots+2) = 1122;
-	*(idots+3) = 2342;
-	*(idots+4) = 2623;
-	*(idots+5) = 817;
-	solveprofile("./130000-h.tiff", "./130000-v.tiff", idots, "out", "cal");
+	*(idots) = 1571;
+	*(idots+1) = 687;
+	*(idots+2) = 1547;
+	*(idots+3) = 2290;
+	*(idots+4) = 3037;
+	*(idots+5) = 814;
+	solveprofile("./../images/411-b-14.9-h.tiff",
+			"./../images/411-b-14.9-v.tiff", idots,
+			"./../images/411-b-14.9-seg47.8.csv", "cal");
 	free(idots);
 
 	return 0;
