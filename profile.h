@@ -19,9 +19,5 @@
 /* FUNCTIONS
  * *********
  */
-int *intalloc(size_t rs, size_t cs);
-void set2darray(int *marray, int r, int c, int cs, int val);
-void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
-		char *calbfn);
 
 #endif /* INC_PROFILE_H */

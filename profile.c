@@ -19,7 +19,7 @@ static char *relfn = "huerel.csv";
  * ***************
  * Declared here instead of header.
  */
-void extractcalib(FILE *file);
+void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn);
 void centroid(uint32 *im, uint32 w, uint32 h, int *idot, float *dot, int dotpx);
 void calcpattvecs(const uint32 *im, const int iw, float *vecs, const int bw,
 		const int *ipix, const int *yb, const int *offs, const float idist,
@@ -29,42 +29,19 @@ float extrapolate(const float *ppos, const float *psnrm, const float *ch);
 void solvesurface(float *vecs, float *poss, const int bw, const int *ipix,
 		const int *yb, const int *offs, const float idepth);
 void surfnorm(const float *vin, const float *vre, float *snrm);
+void slopeerror(const float *vecs, const float *poss, const int bw,
+		const int *yb, const int shape, const float *params, float *serr);
 
-/* Functions for creating pointers within python
- * In python for (3,2) array use:
- * ptr = profile.intalloc(3, 2)
- * To set y val of first dot to 200:
- * profile.set2darray(ptr, 0, 1, 2, 200);
- */
-int *intalloc(size_t rs, size_t cs) {
-	return malloc(rs*cs*sizeof(int));
-}
-
-void set2darray(int *marray, int r, int c, int cs, int val) {
-	*(marray + r*cs + c) = val;
-}
-
-// MIGHT WANT TO CONSIDER CHECKING EACH MALLOC FOR ERROR.
-void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
-		char *calbfn) {
+void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	TIFF *image; // TIFF file pointer
 	uint32 wid, hei; // Image width and height
 	uint32 *imdata; // Pixel data loaded from TIFF image, y major
-	int R1, R2, R3;
 	int dotpx; // Approximate width of ref dot in pixels
 	float *dots = malloc(3*2*sizeof(*dots)); // Sub-pixel ref dot locations
 	int *pxcorns = malloc(4*2*sizeof(*pxcorns));
 
-	printf("%s\n", imfnh);
 	printf("%d, %d\n%d, %d\n%d, %d\n", *(idots), *(idots+1), *(idots+2),
 		*(idots+3), *(idots+4), *(idots+5));
-	// Load in and extract parameters from calibration file if supplied.
-	// Need to check if "" in python gives NULL pointer.
-	if (calbfn != NULL) {
-		FILE *file = fopen(calbfn, "r");
-		if (file != NULL) extractcalib(file);
-		else printf("Error loading calibration file. Using defaults...\n");	
-	} else printf("No calibration file given. Using defaults...\n");	
 
 	// Might want to move but initcamera needs to be run.
 	initcamera();
@@ -95,12 +72,6 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 
 	TIFFClose(image);
 	image = NULL;
-
-	// Testing.
-	R1 = TIFFGetR(*(imdata));
-	R2 = TIFFGetR(*(imdata+1));
-	R3 = TIFFGetR(*(imdata+wid));
-	printf("R, R+1, R+wid: %d, %d, %d\n", R1, R2, R3);
 
 	// Find centre of dots.
 	dotpx = objpixsize(dotsize, camdistguess);
@@ -319,8 +290,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	transformpatt(vecs, xlen, ybound);
 	printf("Pattern vectors translated to global coords.\n");
 
-	// Set up array of vectors to hold pattern positions. Later on it holds
-	// normal vectors.
+	// Set up array of vectors to hold mirror surface positions.
 	float *poss = malloc(xlen*ylen*3*sizeof(*poss));
 	if (poss == NULL) {
 		printf("Cannot allocate memory for poss, exiting...\n");
@@ -337,7 +307,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	// And fit ideal curve.
 
 	// Finding best fitting sphere.
-	Errparams fitpars = {poss, xlen, ybound, NULL};
+/*	Errparams fitpars = {poss, xlen, ybound, NULL};
 	gsl_vector *sphfitvars = gsl_vector_alloc(4);
 	// Setting starting point.
 	gsl_vector_set(sphfitvars, 0, 500.0); // x0
@@ -354,17 +324,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 
 	// Fitting ideal curve to data.
 	minerror(&sphesqerr, &fitpars, 4, sphfitvars, sphstep);
-/*
-	// ALTERING DATA TO SEE IF PARABOLOID FITTING CORRECTLY.
-	for (int x=0; x<xlen; x++) {
-		for (int y=*(ybound+x*2); y<=*(ybound+x*2+1); y++) {
-			*(poss+(y*xlen+x)*3+2) = (float) -paraboloid(*(poss+(y*xlen+x)*3) -
-					500.0, *(poss+(y*xlen+x)*3+1) - 700.0, 6.0, 7.0);
-		}
-	}
-*/
 
-	/*
 	// Need to now find best fitting curve.
 	gsl_vector *parfitvars = gsl_vector_alloc(8);
 	// Setting starting point, using offsets found in sphere fitting.
@@ -391,12 +351,11 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	// Fitting best fitting curve to data.
 	//minerror(&parabsqerr, &fitpars, 8, parfitvars, parstep);
 
-	*/
 	printf("%f, %f, %f, %f\n", gsl_vector_get(sphfitvars, 0),
 			gsl_vector_get(sphfitvars, 1),
 			gsl_vector_get(sphfitvars, 2),
 			gsl_vector_get(sphfitvars, 3));
-	/*printf("%f, %f, %f, %f, %f, %f, %f, %f\n", gsl_vector_get(parfitvars, 0),
+	printf("%f, %f, %f, %f, %f, %f, %f, %f\n", gsl_vector_get(parfitvars, 0),
 			gsl_vector_get(parfitvars, 1),
 			gsl_vector_get(parfitvars, 2),
 			gsl_vector_get(parfitvars, 3),
@@ -405,65 +364,113 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 			gsl_vector_get(parfitvars, 6),
 			gsl_vector_get(parfitvars, 7));
 */
-	// Then calculate slope errors against best fitting curve and ideal curve.
 
-	// Calculating slope errors relative to sphere.
-	
-	size_t pointc = 0;
-	float *inorm = malloc(3*sizeof(*inorm)); // Ideal normal
-	float mux = 0.0f; // Slope error mean
-	float muy = 0.0f; // Slope error mean
-	float *locx = malloc(3*sizeof(*locx));
-	float *locy = malloc(3*sizeof(*locy));
-	float xaxis[3] = {1.0f, 0.0f, 0.0f};
-	for (int px=0; px<xlen; px++) {
-		for (int py=*(ybound+px*2); py<=*(ybound+px*2+1); py++) {
-			// Work out ideal normal for x and y coords of given pixel.
-			sphereslope((float) (*(poss+(py*xlen+px)*3)
-					- gsl_vector_get(sphfitvars, 0)),
-				(float) (*(poss+(py*xlen+px)*3+1)
-					- gsl_vector_get(sphfitvars, 1)),
-				(float) gsl_vector_get(sphfitvars, 3), inorm);
-			// Take cross product of inorm with global x axis to produce locy.
-			fcross(xaxis, inorm, locy);
-			fcross(locy, inorm, locx);
-			
-			// Working out local x and y components of surface norm.
-			float epsx = fdot(locx, (vecs+(py*xlen+px)*3));
-			float epsy = fdot(locy, (vecs+(py*xlen+px)*3));
+	// Check for file containing fitting info.
+	FILE *fitfile;
+	char fitext[] = ".fit";
+	char *fitfn = malloc((strlen(fitext)+strlen(outfn)+1)*sizeof(*fitfn));
+	float *spserr;
+	float *paserr;
 
-			// For now just save in vecs.
-			*(vecs+(py*xlen+px)*3) = epsx;
-			*(vecs+(py*xlen+px)*3+1) = epsy;
-			*(vecs+(py*xlen+px)*3+2) = 0.0f;
-			
-			mux = mux + epsx;
-			muy = muy + epsy;
-			pointc++;
+	strcpy(fitfn, outfn);
+	strcat(fitfn, fitext);
+
+	// Creating file name to search for.
+
+	fitfile = fopen(fitfn, "r");
+	if (fitfile==NULL) {
+		printf("Fitting data not found, skipping slope error calculations.");
+	} else {
+		char line[80]; // Buffere size of 80 (used in while loop below)
+		int lcount = 0;
+		float parms[10]; // Holds all parameters, sphere is first
+		// Allocating memory to hold slope errors.
+		spserr = malloc(xlen*ylen*2*sizeof(*spserr));
+		if (sperr == NULL) {
+			printf("Cannot allocate memory for spherical s/e, exiting...\n");
+			exit(1);
 		}
-	}
-	free(inorm);
-	inorm = NULL;
-	free(locx);
-	locx = NULL;
-	free(locy);
-	locy = NULL;
-	mux = mux/pointc;
-	muy = muy/pointc;
-	float sigx = 0.0f;
-	float sigy = 0.0f;
-	for (int px=0; px<xlen; px++) {
-		for (int py=*(ybound+px*2); py<=*(ybound+px*2+1); py++) {
-			sigx = sigx + powf((*(vecs+(py*xlen+px)*3)-mux), 2.0f);
-			sigy = sigy + powf((*(vecs+(py*xlen+px)*3+1)-muy), 2.0f);
+		paserr = malloc(xlen*ylen*2*sizeof(*paserr));
+		if (paserr == NULL) {
+			printf("Cannot allocate memory for paraboloidal s/e, exiting...\n");
+			exit(1);
 		}
+
+		while (fgets(line, 80, fitfile) != NULL) {
+			if (lcount >= 10) break;
+
+			sscanf(line, "%f", parms);
+			lcount++;
+		}
+
+		// Slope errors for sphere and paraboloid.
+		if (lcount == 3) {
+			slopeerror(vecs, poss, xlen, ybound, 0, parms, spserr);
+		} else if (lcount == 7) {
+			slopeerror(vecs, poss, xlen, ybound, 1, parms, paserr);
+		} else if (lcount == 10) {
+			slopeerror(vecs, poss, xlen, ybound, 0, parms, spserr);
+			slopeerror(vecs, poss, xlen, ybound, 1, (parms+3), paserr);
+		}
+
+		char *sseext[] = ".sse"
+		char *ssefn = malloc((strlen(sseext)+strlen(outfn)+1)*sizeof(*ssefn));
+		strcpy(ssefn, outfn);
+		strcat(ssefn, sseext);
+		FILE *ssavefile = fopen(ssefn, "w");
+		if (ssavefile == NULL) {
+			printf("Error opening save file\n");	
+			exit(1);
+		}
+		for (int x=0; x<xlen; x=x+xlen/40) {
+			for (int y=*(ybound+x*2); y<=*(ybound+x*2+1); y=y+xlen/40) {
+				fprintf(ssavefile, "%10.3e, %10.3e\n", *(spserr+(y*xlen+x)*2),
+					*(spserr+(y*xlen+x)*2+1));
+			}
+		}
+		fclose(ssavefile);
+ 
+		free(ssefn);
+		ssefn = NULL;
+
+		char *pseext[] = ".pse"
+		char *psefn = malloc((strlen(pseext)+strlen(outfn)+1)*sizeof(*psefn));
+		strcpy(psefn, outfn);
+		strcat(psefn, pseext);
+		ssavefile = fopen(psefn, "w");
+		if (ssavefile == NULL) {
+			printf("Error opening save file\n");	
+			exit(1);
+		}
+		for (int x=0; x<xlen; x=x+xlen/40) {
+			for (int y=*(ybound+x*2); y<=*(ybound+x*2+1); y=y+xlen/40) {
+				fprintf(ssavefile, "%10.3e, %10.3e\n", *(paserr+(y*xlen+x)*2),
+					*(paserr+(y*xlen+x)*2+1));
+			}
+		}
+		fclose(ssavefile);
+		ssavefile = NULL;
+ 
+		free(psefn);
+		psefn = NULL;
+
+		free(spserr);
+		spserr = NULL;
+		free(paserr);
+		paserr = NULL;
 	}
-	sigx =  sqrtf(sigx/(pointc-1));
-	sigy =  sqrtf(sigy/(pointc-1));
-	printf("Slope errors for sphere: %f, %f, %f, %f\n", mux, muy, sigx, sigy); 
+	fclose(fitfile);
+	fitfile = NULL;
+
+	free(fitfn);
+	fitfn = NULL;
 	
 	// Saving to file selection of points.
-	FILE *savefile = fopen(outfn, "w");
+	char *posext[] = ".pos"
+	char *posfn = malloc((strlen(posext)+strlen(outfn)+1)*sizeof(*posfn));
+	strcpy(posfn, outfn);
+	strcat(posfn, posext);
+	FILE *savefile = fopen(posfn, "w");
 	if (savefile == NULL) {
 		printf("Error opening save file\n");	
 		exit(1);
@@ -475,7 +482,15 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 		}
 	}
 	fclose(savefile);
-	savefile = fopen("../images/lesserout.csv", "w");
+	free(posfn);
+	posfn = NULL;
+
+	// Saving to file a lessor selection of points.
+	char *poslext[] = ".posl"
+	char *poslfn = malloc((strlen(poslext)+strlen(outfn)+1)*sizeof(*poslfn));
+	strcpy(poslfn, outfn);
+	strcat(poslfn, poslext);
+	savefile = fopen(poslfn, "w");
 	if (savefile == NULL) {
 		printf("Error opening save file\n");	
 		exit(1);
@@ -488,11 +503,13 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 	}
 	fclose(savefile);
 	savefile = NULL;
+	free(poslfn);
+	poslfn = NULL;
 
-	gsl_vector_free(sphstep);
-	sphstep = NULL;
-	gsl_vector_free(sphfitvars);
-	sphfitvars = NULL;
+	//gsl_vector_free(sphstep);
+	//sphstep = NULL;
+	//gsl_vector_free(sphfitvars);
+	//sphfitvars = NULL;
 	//gsl_vector_free(parstep);
 	//parstep = NULL;
 	//gsl_vector_free(parfitvars);
@@ -510,10 +527,6 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn,
 
 	freecamera();
 	freepattern();
-}
-
-void extractcalib(FILE *file) {
-
 }
 
 // Determines which part of pattern is reflected for each pixel.
@@ -810,6 +823,69 @@ float extrapolate(const float *ppos, const float *psnrm, const float *ch) {
 	return fdot(pc,psnrm)/fdot(ch,psnrm);
 }
 
+void slopeerror(const float *vecs, const float *poss, const int bw,
+		const int *yb, const int shape, const float *params, float *serr) {
+	// Calculating slope errors relative to sphere.
+	// Shape 0 is sphere, shape 1 is elliptic paraboloid.
+	// For sphere: params = xoff yoff rad.
+	// For paraboloid: params = xoff yoff xrot yrot zrot f1 f2.
+	size_t pointc = 0;
+	float *inorm = malloc(3*sizeof(*inorm)); // Ideal normal
+	float mux = 0.0f; // Slope error mean
+	float muy = 0.0f; // Slope error mean
+	float *locx = malloc(3*sizeof(*locx));
+	float *locy = malloc(3*sizeof(*locy));
+	float xaxis[3] = {1.0f, 0.0f, 0.0f};
+	for (int px=0; px<bw; px++) {
+		for (int py=*(ybound+px*2); py<=*(ybound+px*2+1); py++) {
+			// Work out ideal normal for x and y coords of given pixel.
+			if (shape == 0) {
+				sphereslope(*(poss+(py*bw+px)*3) - *(params),
+						*(poss+(py*bw+px)*3+1) - *(params+1), *(params+2),
+						inorm);
+			} else if (shape == 1) {
+
+
+			}
+
+			// Take cross product of inorm with global x axis to produce locy.
+			fcross(xaxis, inorm, locy);
+			fcross(locy, inorm, locx);
+			
+			// Working out local x and y components of surface norm.
+			float epsx = fdot(locx, (vecs+(py*bw+px)*3));
+			float epsy = fdot(locy, (vecs+(py*bw+px)*3));
+
+			// For now just save in vecs.
+			*(serr+(py*bw+px)*2) = epsx;
+			*(serr+(py*bw+px)*2+1) = epsy;
+			
+			mux = mux + epsx;
+			muy = muy + epsy;
+			pointc++;
+		}
+	}
+	free(inorm);
+	inorm = NULL;
+	free(locx);
+	locx = NULL;
+	free(locy);
+	locy = NULL;
+	mux = mux/pointc;
+	muy = muy/pointc;
+	float sigx = 0.0f;
+	float sigy = 0.0f;
+	for (int px=0; px<bw; px++) {
+		for (int py=*(ybound+px*2); py<=*(ybound+px*2+1); py++) {
+			sigx = sigx + powf((*(vecs+(py*bw+px)*3)-mux), 2.0f);
+			sigy = sigy + powf((*(vecs+(py*bw+px)*3+1)-muy), 2.0f);
+		}
+	}
+	sigx = sqrtf(sigx/(pointc-1));
+	sigy = sqrtf(sigy/(pointc-1));
+	printf("Slope errors for sphere: %f, %f, %f, %f\n", mux, muy, sigx, sigy); 
+}
+
 void centroid(uint32 *im, uint32 w, uint32 h, int *idot, float *dot,
 		int dotpx) {
 
@@ -887,25 +963,26 @@ void centroid(uint32 *im, uint32 w, uint32 h, int *idot, float *dot,
 	*(dot+1) = ymean + lowy;
 }
 
-int main() {
-	// Might want to make this a callable program instead of interfacing with
-	// python.
-	float tick = 50.0f;
-	float boom = 100.0f;
-	int *idots = malloc(3*2*sizeof(*idots));
-	printf("Starting...\n");
-	printf("%f, %f\n", tick-boom, boom-tick);
+int main(int argc, char *argv[]) {
+	printf("Reading in arguments...\n");
 
-	*(idots) = 1571;
-	*(idots+1) = 687;
-	*(idots+2) = 1547;
-	*(idots+3) = 2290;
-	*(idots+4) = 3037;
-	*(idots+5) = 814;
-	solveprofile("./../images/411-b-14.9-h.tiff",
-			"./../images/411-b-14.9-v.tiff", idots,
-			"./../images/411-b-14.9-seg47.8.csv", "cal");
+	if (argc != 10) {
+		printf("Incorrect number of arguments.\n\nprofile.o himage vimage p1x p1y p2x p2y p3x p3y outfn\n\n");
+		exit(1);
+	}
+
+	int *idots = malloc(3*2*sizeof(*idots));
+
+	*(idots) = atoi(argv[3]);
+	*(idots+1) = atoi(argv[4]);
+	*(idots+2) = atoi(argv[5]);
+	*(idots+3) = atoi(argv[6]);
+	*(idots+4) = atoi(argv[7]);
+	*(idots+5) = atoi(argv[8]);
+
+	solveprofile(argv[1], argv[2], idots, argv[9]);
 	free(idots);
+	idots = NULL;
 
 	return 0;
 }

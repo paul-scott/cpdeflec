@@ -112,11 +112,11 @@ void minerror(double (*f)(const gsl_vector *va, void *params),
 		size = gsl_multimin_fminimizer_size(minzer);
 		status = gsl_multimin_test_size(size, 1e-2);
 
-		printf("%5d: ", iter);
+		//printf("%5d: ", iter);
 		for (int i=0; i<n; i++) {
 			printf("%10.3e ", gsl_vector_get(minzer->x, i));
 		}
-		printf("f() = %7.3f size = %.3f\n", minzer->fval, size);
+		//printf("f() = %7.3f size = %.3f\n", minzer->fval, size);
 		iter++;
 	} while (status == GSL_CONTINUE && iter < 2000);
 
