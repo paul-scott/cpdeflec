@@ -83,10 +83,10 @@ void rotmatzyx(const float za, const float ya, const float xa, float *rm) {
 	float *m1 = malloc(9*sizeof(*m1));
 	float *m2 = malloc(9*sizeof(*m2));
 
-	rotmatx(za, rm);
+	rotmatz(za, rm);
 	rotmaty(ya, m1);
 	fmatxmat(m1, rm, m2);
-	rotmatz(xa, m1);
+	rotmatx(xa, m1);
 	fmatxmat(m1, m2, rm);
 
 	free(m1);
