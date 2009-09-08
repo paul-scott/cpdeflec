@@ -96,7 +96,7 @@ int locatecam(float *dots, float *dotsep, float distguess) {
 			exit(1);
 		}
 
-		print_state(iter, solver);
+		//print_state(iter, solver);
  
 		status = gsl_multiroot_test_residual(solver->f, 1e-7);
 
@@ -150,7 +150,7 @@ int locatecam(float *dots, float *dotsep, float distguess) {
 	fscale(-1.0f, ph); // Only uses first vector in ph
 	fmatxvec(camtrans, ph, campos); // Only uses first vector in ph
 
-	printf("campos: %f, %f, %f\n", *campos, *(campos+1), *(campos+2));
+	printf("Camera position: %f, %f, %f\n", *campos, *(campos+1), *(campos+2));
 
 	// Calculate inverse camera transform.
 	gsl_matrix *ctran = gsl_matrix_alloc(3,3);
@@ -220,7 +220,7 @@ void findpix(const float *vec, int *pix) {
 	// Position on array from optical centre.
 	// Might want to round here...
 	fscale(-prdist/(*(dir+2)), dir);
-	printf("%f, %f, %f\n", *(dir), *(dir+1), *(dir+2));
+	//printf("%f, %f, %f\n", *(dir), *(dir+1), *(dir+2));
 	*(pix) = (int) ((*(dir) + prpoint[0])/pxsize + camdims[0]/2.0f - 0.5f);
 	*(pix+1) = (int) ((*(dir+1) + prpoint[1])/pxsize + camdims[1]/2.0f - 0.5f);
 

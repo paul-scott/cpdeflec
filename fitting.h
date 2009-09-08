@@ -25,5 +25,7 @@ double paraboloid(const double x, const double y, const double a,
 		const double b);
 double sphere(const double x, const double y, const double rad);
 void sphereslope(const float x, const float y, const float rad, float *nrm);
+void parabslope(const float x, const float y, const float f1, const float f2,
+		float *nrm);
 
 #endif /* INC_FITTING_H */

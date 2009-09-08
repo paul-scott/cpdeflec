@@ -30,6 +30,7 @@ int imax(int a, int b);
 int imin(int a, int b);
 void fmatxmat(const float *m1, const float *m2, float *m3);
 void rotmatxyz(const float xa, const float ya, const float za, float *rm);
+void rotmatzyx(const float za, const float ya, const float xa, float *rm);
 void rotmatx(const float ang, float *rm);
 void rotmaty(const float ang, float *rm);
 void rotmatz(const float ang, float *rm);

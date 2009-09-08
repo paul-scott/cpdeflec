@@ -35,6 +35,8 @@ void fcross(const float *a, const float *b, float *c) {
 }
 
 void fmatxvec(const float *M, const float *x, float *y) {
+	// Note that these functions could first copy data so that data could
+	// be copied back to first variable.
 	*(y) = fdot(M,x);
 	*(y+1) = fdot(M+1*3,x);
 	*(y+2) = fdot(M+2*3,x);
@@ -69,6 +71,22 @@ void rotmatxyz(const float xa, const float ya, const float za, float *rm) {
 	rotmaty(ya, m1);
 	fmatxmat(m1, rm, m2);
 	rotmatz(za, m1);
+	fmatxmat(m1, m2, rm);
+
+	free(m1);
+	m1 = NULL;
+	free(m2);
+	m2 = NULL;
+}
+void rotmatzyx(const float za, const float ya, const float xa, float *rm) {
+	// Creates rotation vector from applying rz then ry then rx.
+	float *m1 = malloc(9*sizeof(*m1));
+	float *m2 = malloc(9*sizeof(*m2));
+
+	rotmatx(za, rm);
+	rotmaty(ya, m1);
+	fmatxmat(m1, rm, m2);
+	rotmatz(xa, m1);
 	fmatxmat(m1, m2, rm);
 
 	free(m1);

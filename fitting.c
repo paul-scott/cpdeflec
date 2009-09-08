@@ -21,12 +21,12 @@ double sphesqerr(const gsl_vector *vars, void *params) {
 }
 
 double parabsqerr(const gsl_vector *vars, void *params) {
-	// vars = xoff, yoff, zoff, xrot, yrot, zrot, xa, ya;
+	// vars = xoff, yoff, zoff, xrot, yrot, zrot, f1, f2;
 	const Errparams *par = (Errparams *) params;
 	float *poss = par->poss;
 	int xlen = par->xlen;
 	int *yb = par->yb;
-	double err = 0.0f;
+	double err = 0.0;
 	float *rotm = malloc(9*sizeof(*rotm));
 	float tvec1[3];
 	float tvec2[3];
@@ -36,12 +36,13 @@ double parabsqerr(const gsl_vector *vars, void *params) {
 
 	for (int x=0; x<xlen; x=x+xlen/50) {
 		for (int y=*(yb+x*2); y<=*(yb+x*2+1); y=y+xlen/50) {
-			// Wait need to subtract offset from vec...
-			tvec1[0] = (float) (*(poss+(y*xlen+x)*3) - gsl_vector_get(vars, 0));
-			tvec1[1] = (float) (*(poss+(y*xlen+x)*3+1) -
-				gsl_vector_get(vars, 1));
-			tvec1[2] = (float) (*(poss+(y*xlen+x)*3+2) -
-				gsl_vector_get(vars, 2));
+			// Wait need to add shift to vec...
+			tvec1[0] = (float) (*(poss+(y*xlen+x)*3) +
+					gsl_vector_get(vars, 0));
+			tvec1[1] = (float) (*(poss+(y*xlen+x)*3+1) +
+					gsl_vector_get(vars, 1));
+			tvec1[2] = (float) (*(poss+(y*xlen+x)*3+2) +
+					gsl_vector_get(vars, 2));
 			// Apply rotations.
 			fmatxvec(rotm, tvec1, tvec2);
 			// + sign since paraboloid needs to be upside down.
@@ -57,10 +58,9 @@ double parabsqerr(const gsl_vector *vars, void *params) {
 }
 
 
-double paraboloid(const double x, const double y, const double a,
-		const double b) {
-	// a, b is 2*foclen.
-	return x*x/(2*a) + y*y/(2*b);
+double paraboloid(const double x, const double y, const double f1,
+		const double f2) {
+	return x*x/(4.0*f1) + y*y/(4.0*f2);
 }
 
 double sphere(const double x, const double y, const double rad) {
@@ -69,12 +69,22 @@ double sphere(const double x, const double y, const double rad) {
 }
 
 void sphereslope(const float x, const float y, const float rad, float *nrm) {
-	// Normal is equal to sphere centre minus sphere location.
+	// Normal is equal to sphere centre minus sphere surface location.
 	*nrm = -x;
 	*(nrm+1) = -y;
 	*(nrm+2) = -sqrtf(rad*rad - x*x - y*y);
 	fscale(1.0f/fnorm(nrm), nrm);
 }
+
+void parabslope(const float x, const float y, const float f1, const float f2,
+		float *nrm) {
+	// Upside down parabaloid, hence the signs.
+	*nrm = -x/(2.0f*f1);
+	*(nrm+1) = -y/(2.0f*f2);
+	*(nrm+2) = -1.0f;
+	fscale(1.0f/fnorm(nrm), nrm);
+}
+
 
 void minerror(double (*f)(const gsl_vector *va, void *params),
 		const Errparams *pars, const size_t n, gsl_vector *vars,
@@ -114,9 +124,9 @@ void minerror(double (*f)(const gsl_vector *va, void *params),
 
 		//printf("%5d: ", iter);
 		for (int i=0; i<n; i++) {
-			printf("%10.3e ", gsl_vector_get(minzer->x, i));
+			//printf("%10.3e ", gsl_vector_get(minzer->x, i));
 		}
-		//printf("f() = %7.3f size = %.3f\n", minzer->fval, size);
+		printf("f() = %7.3f size = %.3f\n", minzer->fval, size);
 		iter++;
 	} while (status == GSL_CONTINUE && iter < 2000);
 
