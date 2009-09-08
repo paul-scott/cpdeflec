@@ -1,27 +1,33 @@
 #include "fitting.h"
 
 double sphesqerr(const gsl_vector *vars, void *params) {
-	// vars = xoff, yoff, zoff, rad;
+	// vars = xshft, yshft, zshft, rad;
 	const Errparams *par = (Errparams *) params;
 	float *poss = par->poss;
 	int xlen = par->xlen;
 	int *yb = par->yb;
-	double err = 0.0f;
+	double err = 0.0;
+	double tvec[3];
 
 	for (int x=0; x<xlen; x=x+xlen/50) {
 		for (int y=*(yb+x*2); y<=*(yb+x*2+1); y=y+xlen/50) {
-			err = err + pow((double) (*(poss+(y*xlen+x)*3+2) -
-						gsl_vector_get(vars, 2) + gsl_vector_get(vars, 3) -
-						sphere(*(poss+(y*xlen+x)*3) - gsl_vector_get(vars, 0),
-							*(poss+(y*xlen+x)*3+1) - gsl_vector_get(vars, 1),
-							gsl_vector_get(vars, 3))),2.0);
+			// Wait need to add shift to vec...
+			tvec[0] = (double) (*(poss+(y*xlen+x)*3) +
+					gsl_vector_get(vars, 0));
+			tvec[1] = (double) (*(poss+(y*xlen+x)*3+1) +
+					gsl_vector_get(vars, 1));
+			tvec[2] = (double) (*(poss+(y*xlen+x)*3+2) +
+					gsl_vector_get(vars, 2));
+
+			err = err + pow((double) (tvec[2] + gsl_vector_get(vars, 3) -
+						sphere(tvec[0], tvec[1], gsl_vector_get(vars, 3))),2.0);
 		}
 	}
 	return err;
 }
 
 double parabsqerr(const gsl_vector *vars, void *params) {
-	// vars = xoff, yoff, zoff, xrot, yrot, zrot, f1, f2;
+	// vars = xshft, yshft, zshft, xrot, yrot, zrot, f1, f2;
 	const Errparams *par = (Errparams *) params;
 	float *poss = par->poss;
 	int xlen = par->xlen;
@@ -126,9 +132,10 @@ void minerror(double (*f)(const gsl_vector *va, void *params),
 		for (int i=0; i<n; i++) {
 			//printf("%10.3e ", gsl_vector_get(minzer->x, i));
 		}
-		printf("f() = %7.3f size = %.3f\n", minzer->fval, size);
 		iter++;
 	} while (status == GSL_CONTINUE && iter < 2000);
+
+	printf("f() = %7.3f size = %.3f\n", minzer->fval, size);
 
 	for (int i=0; i<n; i++) {
 		gsl_vector_set(vars, i, gsl_vector_get(minzer->x, i));
