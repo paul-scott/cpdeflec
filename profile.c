@@ -384,14 +384,14 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	float *spvars = malloc(4*sizeof(*spvars));
 	float *pavars = malloc(8*sizeof(*pavars));
 
-//j	*(spvars) = (float) gsl_vector_get(sphfitvars, 0);
+//	*(spvars) = (float) gsl_vector_get(sphfitvars, 0);
 //	*(spvars+1) = (float) gsl_vector_get(sphfitvars, 1);
 //	*(spvars+2) = (float) gsl_vector_get(sphfitvars, 2);
 //	*(spvars+3) = (float) gsl_vector_get(sphfitvars, 3);
 	*(spvars) = 0.0f;
 	*(spvars+1) = 0.0f;
 	*(spvars+2) = 0.0f;
-	*(spvars+3) = 28000.0;
+	*(spvars+3) = 28000.0f;
 
 	*(pavars) = (float) gsl_vector_get(parfitvars, 0);
 	*(pavars+1) = (float) gsl_vector_get(parfitvars, 1);
@@ -432,7 +432,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	printf("Slope errors for sphere\n");
 	slopeerror(vecs, poss, xlen, ybound, 0, spvars, spserr);
 	printf("Slope errors for paraboloid\n");
-	//slopeerror(vecs, poss, xlen, ybound, 1, pavars, paserr);
+	slopeerror(vecs, poss, xlen, ybound, 1, pavars, paserr);
 
 	// Saving spherical slope errors.
 	char sseext[] = ".sse";
@@ -892,6 +892,8 @@ void slopeerror(const float *vecs, const float *poss, const int bw,
 			// Working out local x and y components of surface norm.
 			float epsx = fdot(locx, (vecs+(py*bw+px)*3));
 			float epsy = fdot(locy, (vecs+(py*bw+px)*3));
+
+			//printf("%f, %f\n", epsx, epsy);
 
 			// For now just save in vecs.
 			*(serr+(py*bw+px)*2) = epsx;
