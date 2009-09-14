@@ -447,7 +447,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	}
 	// fn, sphere RoC, parab f1, parab f2, parab zrot, sphere sigx,
 	// sphere sigy, parab sigx, parab sigy.
-	fprintf(resultfile, "%s %10.4e %10.4e %10.4e %10.4e %10.4e %10.4e %10.4e %10.4e\n",
+	fprintf(resultfile, "%s,%10.4e,%10.4e,%10.4e,%10.4e,%10.4e,%10.4e,%10.4e,%10.4e\n",
 			outfn, *(spvars+3), *(pavars+6), *(pavars+7), *(pavars+5),
 			spsest[2], spsest[3], pasest[2], pasest[3]);
 	fclose(resultfile);
@@ -465,7 +465,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	}
 	for (int x=0; x<xlen; x=x+xlen/40) {
 		for (int y=*(ybound+x*2); y<=*(ybound+x*2+1); y=y+xlen/40) {
-			fprintf(ssavefile, "%10.3e %10.3e\n", *(spserr+(y*xlen+x)*2),
+			fprintf(ssavefile, "%10.3e,%10.3e\n", *(spserr+(y*xlen+x)*2),
 				*(spserr+(y*xlen+x)*2+1));
 		}
 	}
@@ -486,7 +486,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	}
 	for (int x=0; x<xlen; x=x+xlen/40) {
 		for (int y=*(ybound+x*2); y<=*(ybound+x*2+1); y=y+xlen/40) {
-			fprintf(ssavefile, "%10.3e %10.3e\n", *(paserr+(y*xlen+x)*2),
+			fprintf(ssavefile, "%10.3e,%10.3e\n", *(paserr+(y*xlen+x)*2),
 				*(paserr+(y*xlen+x)*2+1));
 		}
 	}
@@ -518,7 +518,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	}
 	for (int x=0; x<xlen; x=x+xlen/100) {
 		for (int y=*(ybound+x*2); y<=*(ybound+x*2+1); y=y+xlen/100) {
-			fprintf(savefile, "%10.3e %10.3e %10.3e\n", *(poss+(y*xlen+x)*3),
+			fprintf(savefile, "%10.3e,%10.3e,%10.3e\n", *(poss+(y*xlen+x)*3),
 				*(poss+(y*xlen+x)*3+1), *(poss+(y*xlen+x)*3+2));
 		}
 	}
@@ -538,7 +538,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	}
 	for (int x=0; x<xlen; x=x+xlen/40) {
 		for (int y=*(ybound+x*2); y<=*(ybound+x*2+1); y=y+xlen/40) {
-			fprintf(savefile, "%10.3e %10.3e %10.3e\n", *(poss+(y*xlen+x)*3),
+			fprintf(savefile, "%10.3e,%10.3e,%10.3e\n", *(poss+(y*xlen+x)*3),
 				*(poss+(y*xlen+x)*3+1), *(poss+(y*xlen+x)*3+2));
 		}
 	}

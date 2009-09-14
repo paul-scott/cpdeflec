@@ -22,6 +22,11 @@ static float prdist = 20.53f; // Pricipal distance of camera lens in mm
 static float prpoint[2] = {0.1065f,0.2374f}; // Pricipal point in mm
 // Take negative of vms y component.
 
+static float rdisto[2] = {-2.6652e-4f, 5.3876e-7f}; // k3, k5
+//static float dcdisto[2] = {-1.5218e-6f, -1.7102e-5}; // p1, p2
+static float ortdisto = -1.6692e-4f; // a1
+static float affdisto = -9.9472e-5f; // a2
+
 float campos[3] = {0.0f,0.0f,0.0f};
 static float *camtrans;
 static float *caminvtrans;
@@ -236,6 +241,19 @@ void finddirpix(const int x, const int y, float *dir) {
 	temp[0] = -(pxsize*(x - *(camdims)/2.0f + 0.5f) - *(prpoint));
 	temp[1] = -(pxsize*(y - *(camdims+1)/2.0f + 0.5f) - *(prpoint+1));
 	temp[2] = prdist;
+
+	// Correcting for radial lens distortions.
+	/*
+	float radius = sqrtf(temp[0]*temp[0]+temp[1]*temp[1]);
+	float raderr = rdisto[0]*powf(radius,3.0f) +
+			rdisto[1]*powf(radius,5.0f);
+
+	//temp[0] = temp[0] - temp[0]*raderr/radius;
+	//temp[1] = temp[1] - temp[1]*raderr/radius;
+	temp[0] = temp[0]/(1.0f-(raderr/radius)/(1.0f-raderr/radius));
+	temp[1] = temp[1]/(1.0f-(raderr/radius)/(1.0f-raderr/radius));
+	*/
+
 	// Normalizing vector.
 	fscale(1.0f/fnorm(temp),temp);
 
@@ -254,6 +272,24 @@ void finddirpixcam(const float *pix, float *dir) {
 	*(dir) = -(pxsize*(*(pix) - *(camdims)/2.0f + 0.5f) - *(prpoint));
 	*(dir+1) = -(pxsize*(*(pix+1) - *(camdims+1)/2.0f + 0.5f) - *(prpoint+1));
 	*(dir+2) = prdist;
+
+	// Correcting for radial lens distortions.
+	/*float radius = sqrtf((*dir)*(*dir)+(*(dir+1))*(*(dir+1)));
+	float raderr = rdisto[0]*powf(radius,3.0f) +
+			rdisto[1]*powf(radius,5.0f);
+	float dcerr = dcdisto[0]*(radius*radius + 2*(d
+	dDx = p1*(r^2 + 2*x) + 2*p2*x*y
+	dDy = 2*p1*x*y + p2*(r^2 + 2*y) 
+
+	*(dir) = *(dir) - (*(dir))*raderr/radius;
+	*(dir+1) = *(dir+1) - (*(dir+1))*raderr/radius;
+*/
+	/*float radius = sqrtf((*dir)*(*dir)+(*(dir+1))*(*(dir+1)));
+	float raderr = rdisto[0]*powf(radius,3.0f) +
+			rdisto[1]*powf(radius,5.0f);
+	*(dir) = *(dir)/(1.0f-(raderr/radius)/(1.0f-raderr/radius));
+	*(dir+1) = *(dir+1)/(1.0f-(raderr/radius)/(1.0f-raderr/radius));
+*/
 	// Normalizing vector.
 	fscale(1.0f/fnorm(dir),dir);
 }
