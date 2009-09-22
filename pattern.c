@@ -6,12 +6,14 @@
  * horiz rotated pattern, and vertical edge of vert rotated pattern.
  */
 // NOTE NEED TO FIND BETTER VALUE.
-static float patpos[3] = {635.78213f,-364.31177f,-2334.4997f}; // Pos of
+static float patpos[3] = {635.77408f,-364.31168f,-2334.4864f}; // Pos of
+static float patxoff = 4.6407583;
+static float patyoff = 3.2714379;
 // pattern corner
 // NOTE MIGHT WANT TO WORK ON NON ORTHOGONAL VECTORS.
-static float pattrans[3][3] = {{0.8542370f,0.0018613f,-0.5198805f},
-	{0.0015481f,0.9999801f,0.0061239f},
-	{0.5198815f,-0.0060361f,0.8542171f}}; // Coordinate system translation
+static float pattrans[3][3] = {{0.8542358f,0.0018653f,-0.5198823f},
+	{0.0015481f,0.99998f,0.0061316f},
+	{0.5198834f,-0.0060427f,0.8542159f}}; // Coordinate system translation
 float segsize = 47.7f; // Width of repeating pattern segment
 static int relbins = 274;
 static float *rel;
@@ -47,6 +49,8 @@ void freepattern() {
 void transpattvec(float *vec) {
 	float temp[3];
 	// Need to set z component to zero. 
+	*(vec) = *(vec) + patxoff;
+	*(vec+1) = *(vec+1) + patyoff;
 	*(vec+2) = 0.0f;
 	//printf("pat: %f, %f, %f ", *vec, *(vec+1), *(vec+2));
 	fmatxvec((float *) pattrans, vec, temp);

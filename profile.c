@@ -4,10 +4,11 @@
  * *****************
  */
 static float dotsize = 7.0f; // Physiscal size of reference of dots in mm
+//static float dotsep[3] = {1192.8986f,1745.6891f,1271.5304f}; // Distance
 static float dotsep[3] = {1192.8986f,1745.6891f,1271.5304f}; // Distance
 // between TL-BL, BL-TR, TR-TL
 static float corns[4][3] = {{61.010941f,17.819132f,-24.028367f},
-	{61.010941f,1167.8191f,-24.028367f},
+	{81.010941f,1167.8191f,-24.028367f},
 	{1211.0109f,1167.8191f,-24.028367f},
 	{1211.0109f,17.819132f,-24.028367f}}; // Mirror boundary corners:
 // TL, BL, BR, TR
@@ -98,6 +99,10 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 		findpix(corns[i], (pxcorns+i*2));
 		printf("%d, %d\n", *(pxcorns+i*2), *(pxcorns+i*2+1));
 	}
+
+	//float tempdirec[3];
+	//finddirpix(2129, 2918, tempdirec);
+	//printf("%f, %f, %f\n", tempdirec[0], tempdirec[1], tempdirec[2]);
 
 	free(dots);
 	dots = NULL;
@@ -303,6 +308,15 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	for (int i=0; i<(xlen*ylen*3); i++) {
 		*(poss+i) = -1.0f;
 	}
+
+	// Testing different solution starts.
+	/*
+	int initpixi[2];
+	//initpixi[0] = (*(pxcorns+6) - *(pxcorns))/2 + *(pxcorns);
+	initpixi[0] = imax(*(pxcorns+2), *(pxcorns));
+	initpixi[1] = (*(pxcorns+3) - *(pxcorns+1))/2 + *(pxcorns+1);
+	printf("Initial pixel: %d, %d\n", initpixi[0], initpixi[1]);
+	*/
 
 	solvesurface(vecs, poss, xlen, pxcorns, ybound, offset, startdepth);
 	printf("Surface solved.\n");
@@ -693,6 +707,24 @@ void solvesurface(float *vecs, float *poss, const int bw, const int *ipix,
 	fscale(1.0f/fnorm(ph), ph);
 
 	surfnorm(ch, ph, (vecs+((*(ipix+1))*bw+*ipix)*3));
+	
+	// Working up starting column.
+	for (int y=*(ipix+1)-1; y>=*(yb+(*ipix)*2); y--) {
+		finddirpix(*(ipix)+*(offs), y+*(offs+1), ch);
+		float dist = extrapolate((poss+((y+1)*bw+*ipix)*3),
+				(vecs+((y+1)*bw+*ipix)*3), ch);
+		*(poss+(y*bw+*ipix)*3) = dist*ch[0]+ campos[0];
+		*(poss+(y*bw+*ipix)*3+1) = dist*ch[1]+ campos[1];
+		*(poss+(y*bw+*ipix)*3+2) = dist*ch[2]+ campos[2];
+		ph[0] = *(vecs+(y*bw+*ipix)*3) -
+			*(poss+(y*bw+*ipix)*3);
+		ph[1] = *(vecs+(y*bw+*ipix)*3+1) -
+			*(poss+(y*bw+*ipix)*3+1);
+		ph[2] = *(vecs+(y*bw+*ipix)*3+2) -
+			*(poss+(y*bw+*ipix)*3+2);
+		fscale(1.0f/fnorm(ph), ph);
+		surfnorm(ch, ph, (vecs+(y*bw+*ipix)*3));
+	}
 
 	// Working way down starting column.
 	for (int y=*(ipix+1)+1; y<=*(yb+(*ipix)*2+1); y++) {
@@ -730,6 +762,36 @@ void solvesurface(float *vecs, float *poss, const int bw, const int *ipix,
 			*(poss+(iy*bw+x)*3+2);
 		fscale(1.0f/fnorm(ph), ph);
 		surfnorm(ch, ph, (vecs+(iy*bw+x)*3));
+		
+		// Working up.
+		for (int y=iy-1; y>=*(yb+x*2); y--) {
+			int count = 1;
+			finddirpix(x+*(offs), y+*(offs+1), ch);
+			dist = extrapolate((poss+((y+1)*bw+x)*3),
+					(vecs+((y+1)*bw+x)*3), ch);
+			if (*(poss+((y+1)*bw+x+1)*3) != -1.0f) {
+				dist = dist + extrapolate((poss+((y+1)*bw+x+1)*3),
+							(vecs+((y+1)*bw+x+1)*3), ch);
+				count++;
+			}
+			if (*(poss+(y*bw+x+1)*3) != -1.0f) {
+				dist = dist + extrapolate((poss+(y*bw+x+1)*3),
+							(vecs+(y*bw+x+1)*3), ch);
+				count++;
+			}
+			dist = dist/count;
+			*(poss+(y*bw+x)*3) = dist*ch[0]+ campos[0];
+			*(poss+(y*bw+x)*3+1) = dist*ch[1]+ campos[1];
+			*(poss+(y*bw+x)*3+2) = dist*ch[2]+ campos[2];
+			ph[0] = *(vecs+(y*bw+x)*3) -
+				*(poss+(y*bw+x)*3);
+			ph[1] = *(vecs+(y*bw+x)*3+1) -
+				*(poss+(y*bw+x)*3+1);
+			ph[2] = *(vecs+(y*bw+x)*3+2) -
+				*(poss+(y*bw+x)*3+2);
+			fscale(1.0f/fnorm(ph), ph);
+			surfnorm(ch, ph, (vecs+(y*bw+x)*3));
+		}
 
 		// Working down.
 		for (int y=iy+1; y<=*(yb+x*2+1); y++) {
