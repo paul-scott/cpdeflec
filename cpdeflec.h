@@ -1,5 +1,5 @@
-#ifndef INC_PROFILE_H
-#define INC_PROFILE_H
+#ifndef INC_CPDEFLEC_H
+#define INC_CPDEFLEC_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,4 +20,4 @@
  * *********
  */
 
-#endif /* INC_PROFILE_H */
+#endif /* INC_CPDEFLEC_H */

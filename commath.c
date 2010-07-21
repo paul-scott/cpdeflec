@@ -1,4 +1,8 @@
 #include "commath.h"
+/* commath.c
+ * Paul Scott
+ * September 2009
+ */
 
 const double PI = 3.14159265358979;
 

@@ -1,4 +1,8 @@
 #include "camera.h"
+/* camera.c
+ * Paul Scott
+ * September 2009
+ */
 
 /* Local Structures
  */
@@ -16,7 +20,6 @@ static int camdims[2] = {4288,2848}; // Width and height of CCD array in pixels
 static float pxsize = 0.00554f; // Size of a pixel in mm
 static float prdist = 20.53f; // Pricipal distance of camera lens in mm
 static float soptc[2] = {0.1065f,0.2374f}; // Sensor optical centre in mm
-//static float soptc[2] = {0.2374f,-0.1065f}; // Sensor optical centre in mm
 // Take negative of vms y component.
 
 static float rdisto[2] = {-2.6652e-4f, 5.3876e-7f}; // k3, k5

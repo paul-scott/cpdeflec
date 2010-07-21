@@ -2,6 +2,10 @@ from scipy import *
 from scipy.optimize import fsolve
 from scipy.optimize import fmin
 
+# interrors.py 
+# Paul Scott
+# Sept 2009
+
 # Would use camera tilted on side since mirror vert length always largest.
 # Might like to take into account optical axis relative to center of array.
 pixelsize = 0.00554 # Pixel size in mm.

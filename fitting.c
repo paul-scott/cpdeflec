@@ -1,4 +1,8 @@
 #include "fitting.h"
+/* fitting.c
+ * Paul Scott
+ * September 2009
+ */
 
 double sphesqerr(const gsl_vector *vars, void *params) {
 	// vars = xshft, yshft, zshft, rad;

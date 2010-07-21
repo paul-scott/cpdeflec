@@ -1,5 +1,8 @@
 import wx
 import os
+# cpdeflec.py
+# Paul Scott
+# September 2009
 
 ID_OPEN=111
 ID_SOLVE=101
@@ -100,7 +103,7 @@ class MainFrame(wx.Frame):
 			for id in self.files.keys():
 # Do need surfaces any more?
 				outfile = self.files[id][0][:self.files[id][0].rfind('.')-2]
-				command = ('./profile.o '+self.files[id][0]+' '
+				command = ('./cpdeflec '+self.files[id][0]+' '
 					+self.files[id][1]+' '+str(self.dots[id][0][0])+' '
 					+str(self.dots[id][0][1])+' '+str(self.dots[id][1][0])+' '
 					+str(self.dots[id][1][1])+' '+str(self.dots[id][2][0])+' '

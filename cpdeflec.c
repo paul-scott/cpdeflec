@@ -1,10 +1,13 @@
-#include "profile.h"
+#include "cpdeflec.h"
+/* cpdeflec.c
+ * Paul Scott
+ * September 2009
+ */
 
 /* Mirror parameters
  * *****************
  */
 static float dotsize = 7.0f; // Physiscal size of reference of dots in mm
-//static float dotsep[3] = {1192.8986f,1745.6891f,1271.5304f}; // Distance
 static float dotsep[3] = {1192.8986f,1745.6891f,1271.5304f}; // Distance
 // between TL-BL, BL-TR, TR-TL
 static float corns[4][3] = {{61.010941f,17.819132f,-24.028367f},
@@ -14,7 +17,7 @@ static float corns[4][3] = {{61.010941f,17.819132f,-24.028367f},
 // TL, BL, BR, TR
 static float camdistguess = 3000.0f; // Guess of distance from mirror to camera
 static float startdepth = -24.028367f; // Height of starting point.
-static char *relfn = "huerel.csv";
+static char *relfn = "data/huerel.csv";
 
 /* LOCAL FUNCTIONS
  * ***************

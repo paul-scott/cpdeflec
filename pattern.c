@@ -1,4 +1,8 @@
 #include "pattern.h"
+/* pattern.c
+ * Paul Scott
+ * September 2009
+ */
 
 /* Pattern parameters
  * ******************
