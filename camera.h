@@ -8,13 +8,13 @@
 
 #include "commath.h"
 
-extern float campos[3];
+extern double campos[3];
 
 void initcamera();
 void freecamera();
-int objpixsize(float objsize, float objdist);
-int locatecam(float *dots, float *dotsep, float distguess);
-void findpix(const float *vec, int *pix);
-void finddirpix(const int x, const int y, float *dir);
+int objpixsize(double objsize, double objdist);
+int locatecam(double *dots, double *dotsep, double distguess);
+void findpix(const double *vec, int *pix);
+void finddirpix(const int x, const int y, double *dir);
 
 #endif /* INC_CAMERA_H */

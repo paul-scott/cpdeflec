@@ -10,20 +10,20 @@
  * horiz rotated pattern, and vertical edge of vert rotated pattern.
  */
 // NOTE NEED TO FIND BETTER VALUE.
-static float patpos[3] = {635.77408f,-364.31168f,-2334.4864f}; // Pos of
-static float patxoff = 4.6407583;
-static float patyoff = 3.2714379;
+static double patpos[3] = {635.77408,-364.31168,-2334.4864}; // Pos of
+static double patxoff = 4.6407583;
+static double patyoff = 3.2714379;
 // pattern corner
 // NOTE MIGHT WANT TO WORK ON NON ORTHOGONAL VECTORS.
-static float pattrans[3][3] = {{0.8542358f,0.0018653f,-0.5198823f},
-	{0.0015481f,0.99998f,0.0061316f},
-	{0.5198834f,-0.0060427f,0.8542159f}}; // Coordinate system translation
-float segsize = 47.7f; // Width of repeating pattern segment
+static double pattrans[3][3] = {{0.8542358,0.0018653,-0.5198823},
+	{0.0015481,0.99998,0.0061316},
+	{0.5198834,-0.0060427,0.8542159}}; // Coordinate system translation
+double segsize = 47.7; // Width of repeating pattern segment
 static int relbins = 274;
-static float *rel;
+static double *rel;
 
-float gethue(const uint32 *rgb);
-float hueshift(const float hue, const int orien);
+double gethue(const uint32 *rgb);
+double hueshift(const double hue, const int orien);
 
 void initpattern(const char *relfn) {
 	rel = malloc(relbins*sizeof(*rel));
@@ -50,69 +50,69 @@ void freepattern() {
 	rel = NULL;
 }
 
-void transpattvec(float *vec) {
-	float temp[3];
+void transpattvec(double *vec) {
+	double temp[3];
 	// Need to set z component to zero. 
 	*(vec) = *(vec) + patxoff;
 	*(vec+1) = *(vec+1) + patyoff;
-	*(vec+2) = 0.0f;
+	*(vec+2) = 0.0;
 	//printf("pat: %f, %f, %f ", *vec, *(vec+1), *(vec+2));
-	fmatxvec((float *) pattrans, vec, temp);
+	matxvec((double *) pattrans, vec, temp);
 	*(vec) = temp[0] + patpos[0];
 	*(vec+1) = temp[1] + patpos[1];
 	*(vec+2) = temp[2] + patpos[2];
 	//printf("glo: %f, %f, %f\n", *vec, *(vec+1), *(vec+2));
 }
 
-float getdist(const uint32 *rgb, const float pdist, const int orien) {
+double getdist(const uint32 *rgb, const double pdist, const int orien) {
 	// Might like to think of not changing pdist if we get a grey pixel.
-	float shift = hueshift(gethue(rgb), orien);
-	float pshift = fmodf(pdist, segsize);
+	double shift = hueshift(gethue(rgb), orien);
+	double pshift = fmod(pdist, segsize);
 	//printf("s, ps, %f, %f\n", shift, pshift);
 
-	if (shift < (pshift-0.5f*segsize)) {
+	if (shift < (pshift-0.5*segsize)) {
 		return (pdist - pshift + segsize + shift);
-	} else if (shift > (pshift+0.5f*segsize)) {
+	} else if (shift > (pshift+0.5*segsize)) {
 		return (pdist - pshift - segsize + shift);
 	} else {
 		return (pdist - pshift + shift);
 	}
 }
 
-float gethue(const uint32 *rgb) {
-	float R = (float) TIFFGetR(*rgb)/255.0f;
-	float G = (float) TIFFGetG(*rgb)/255.0f;
-	float B = (float) TIFFGetB(*rgb)/255.0f;
+double gethue(const uint32 *rgb) {
+	double R = (double) TIFFGetR(*rgb)/255.0;
+	double G = (double) TIFFGetG(*rgb)/255.0;
+	double B = (double) TIFFGetB(*rgb)/255.0;
 
-	float maxc = fmaxf(R,fmaxf(G,B));
-	float minc = fminf(R,fminf(G,B));
-	// float L = (maxc + minc)/2.0f;
-	float hue = 0.0f;
+	double maxc = fmax(R,fmax(G,B));
+	double minc = fmin(R,fmin(G,B));
+	// double L = (maxc + minc)/2.0;
+	double hue = 0.0;
 	
 	if (maxc == minc) {
-		hue = 0.0f;
+		hue = 0.0;
 		//printf("Grey pixel.\n");
 	} else if (R == maxc) {
-		hue = fmodf(1.0f+(G-B)/(6.0f*(maxc-minc)),1.0f);
+		hue = fmod(1.0+(G-B)/(6.0*(maxc-minc)),1.0);
 	} else if (G == maxc) {
-		hue = (2.0f + (B-R)/(maxc-minc))/6.0f;
+		hue = (2.0 + (B-R)/(maxc-minc))/6.0;
 	} else {
-		hue = (4.0f + (R-G)/(maxc-minc))/6.0f;
+		hue = (4.0 + (R-G)/(maxc-minc))/6.0;
 	}
 
-	//printf("hue: %f, %f, %f, %f ", hue, R*255.0f, G*255.0f, B*255.0f);
+	//printf("hue: %f, %f, %f, %f ", hue, R*255.0, G*255.0, B*255.0);
 	return hue;
 }
 
-float hueshift(const float hue, const int orien) {
+double hueshift(const double hue, const int orien) {
 	// MIGHT NEED TO CHECK....
-	int indice = (int) roundf(hue*relbins);
+	int indice = (int) round(hue*relbins);
 
 	if (indice == relbins) indice = 0;
 	// Need to reverse relation depending on orientation.
 	if (orien) {
 		return segsize*(*(rel+indice));
 	} else {
-		return segsize*(1.0f-(*(rel+indice)));
+		return segsize*(1.0-(*(rel+indice)));
 	}
 }

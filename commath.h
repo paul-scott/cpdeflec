@@ -11,7 +11,7 @@
  */
 typedef struct {
     size_t degree;
-    float *coeffs;
+    double *coeffs;
 } Polynom;
 
 extern const double PI;
@@ -19,21 +19,21 @@ extern const double PI;
 /* FUNCTIONS
  * *********
  */
-float polyget(Polynom *pol, float val);
-float fdot(const float *x, const float *y);
-float fnorm(const float *x);
-void fscale(const float alpha, float *x);
-void faxpy(const float alpha, const float *x, float *y);
-void fcross(const float *a, const float *b, float *c);
-void fmatxvec(const float *M, const float *x, float *y);
+double polyget(Polynom *pol, double val);
+double dot(const double *x, const double *y);
+double norm(const double *x);
+void scale(const double alpha, double *x);
+void axpy(const double alpha, const double *x, double *y);
+void cross(const double *a, const double *b, double *c);
+void matxvec(const double *M, const double *x, double *y);
 int imax(int a, int b);
 int imin(int a, int b);
-void fmatxmat(const float *m1, const float *m2, float *m3);
-void rotmatxyz(const float xa, const float ya, const float za, float *rm);
-void rotmatzyx(const float za, const float ya, const float xa, float *rm);
-void rotmatx(const float ang, float *rm);
-void rotmaty(const float ang, float *rm);
-void rotmatz(const float ang, float *rm);
+void matxmat(const double *m1, const double *m2, double *m3);
+void rotmatxyz(const double xa, const double ya, const double za, double *rm);
+void rotmatzyx(const double za, const double ya, const double xa, double *rm);
+void rotmatx(const double ang, double *rm);
+void rotmaty(const double ang, double *rm);
+void rotmatz(const double ang, double *rm);
 
 
 #endif /* INC_COMMATH_H */

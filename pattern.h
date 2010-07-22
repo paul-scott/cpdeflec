@@ -8,11 +8,11 @@
 
 #include "commath.h"
 
-extern float segsize;
+extern double segsize;
 
 void initpattern(const char *relfn);
 void freepattern();
-float getdist(const uint32 *pix, const float pdist, const int orien);
-void transpattvec(float *vec);
+double getdist(const uint32 *pix, const double pdist, const int orien);
+void transpattvec(double *vec);
 
 #endif /* INC_PATTERN_H */

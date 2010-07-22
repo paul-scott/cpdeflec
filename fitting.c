@@ -4,10 +4,11 @@
  * September 2009
  */
 
-double sphesqerr(const gsl_vector *vars, void *params) {
+double sphesqerr(const gsl_vector *vars, void *params)
+{
 	// vars = xshft, yshft, zshft, rad;
 	const Errparams *par = (Errparams *) params;
-	float *poss = par->poss;
+	double *poss = par->poss;
 	int xlen = par->xlen;
 	int *yb = par->yb;
 	double err = 0.0;
@@ -16,50 +17,43 @@ double sphesqerr(const gsl_vector *vars, void *params) {
 	for (int x=0; x<xlen; x=x+xlen/50) {
 		for (int y=*(yb+x*2); y<=*(yb+x*2+1); y=y+xlen/50) {
 			// Wait need to add shift to vec...
-			tvec[0] = (double) (*(poss+(y*xlen+x)*3) +
-					gsl_vector_get(vars, 0));
-			tvec[1] = (double) (*(poss+(y*xlen+x)*3+1) +
-					gsl_vector_get(vars, 1));
-			tvec[2] = (double) (*(poss+(y*xlen+x)*3+2) +
-					gsl_vector_get(vars, 2));
+			tvec[0] = (*(poss+(y*xlen+x)*3) + gsl_vector_get(vars, 0));
+			tvec[1] = (*(poss+(y*xlen+x)*3+1) + gsl_vector_get(vars, 1));
+			tvec[2] = (*(poss+(y*xlen+x)*3+2) +	gsl_vector_get(vars, 2));
 
-			err = err + pow((double) (tvec[2] + gsl_vector_get(vars, 3) -
-						sphere(tvec[0], tvec[1], gsl_vector_get(vars, 3))),2.0);
+			err = err + pow((tvec[2] + gsl_vector_get(vars, 3) -
+					sphere(tvec[0], tvec[1], gsl_vector_get(vars, 3))),2.0);
 		}
 	}
 	return err;
 }
 
-double parabsqerr(const gsl_vector *vars, void *params) {
+double parabsqerr(const gsl_vector *vars, void *params)
+{
 	// vars = xshft, yshft, zshft, xrot, yrot, zrot, f1, f2;
 	const Errparams *par = (Errparams *) params;
-	float *poss = par->poss;
+	double *poss = par->poss;
 	int xlen = par->xlen;
 	int *yb = par->yb;
 	double err = 0.0;
-	float *rotm = malloc(9*sizeof(*rotm));
-	float tvec1[3];
-	float tvec2[3];
+	double *rotm = malloc(9*sizeof(*rotm));
+	double tvec1[3];
+	double tvec2[3];
 	// Work out rotations matrix.
-	rotmatxyz((float) gsl_vector_get(vars, 3), (float) gsl_vector_get(vars, 4),
-			(float) gsl_vector_get(vars, 5), rotm);
+	rotmatxyz(gsl_vector_get(vars, 3), gsl_vector_get(vars, 4),
+			gsl_vector_get(vars, 5), rotm);
 
 	for (int x=0; x<xlen; x=x+xlen/50) {
 		for (int y=*(yb+x*2); y<=*(yb+x*2+1); y=y+xlen/50) {
 			// Wait need to add shift to vec...
-			tvec1[0] = (float) (*(poss+(y*xlen+x)*3) +
-					gsl_vector_get(vars, 0));
-			tvec1[1] = (float) (*(poss+(y*xlen+x)*3+1) +
-					gsl_vector_get(vars, 1));
-			tvec1[2] = (float) (*(poss+(y*xlen+x)*3+2) +
-					gsl_vector_get(vars, 2));
+			tvec1[0] = (*(poss+(y*xlen+x)*3) + gsl_vector_get(vars, 0));
+			tvec1[1] = (*(poss+(y*xlen+x)*3+1) + gsl_vector_get(vars, 1));
+			tvec1[2] = (*(poss+(y*xlen+x)*3+2) + gsl_vector_get(vars, 2));
 			// Apply rotations.
-			fmatxvec(rotm, tvec1, tvec2);
+			matxvec(rotm, tvec1, tvec2);
 			// + sign since paraboloid needs to be upside down.
-			err = err + pow((double) (tvec2[2] +
-					paraboloid((double) tvec2[0], (double) tvec2[1],
-					gsl_vector_get(vars, 6),
-					gsl_vector_get(vars, 7))),2.0);
+			err = err + pow((tvec2[2] + paraboloid(tvec2[0], tvec2[1],
+					gsl_vector_get(vars, 6), gsl_vector_get(vars, 7))),2.0);
 		}
 	}
 	free(rotm);
@@ -78,21 +72,21 @@ double sphere(const double x, const double y, const double rad) {
 	return sqrt(rad*rad - x*x -	y*y);
 }
 
-void sphereslope(const float x, const float y, const float rad, float *nrm) {
+void sphereslope(const double x, const double y, const double rad, double *nrm) {
 	// Normal is equal to sphere centre minus sphere surface location.
 	*nrm = -x;
 	*(nrm+1) = -y;
-	*(nrm+2) = -sqrtf(rad*rad - x*x - y*y);
-	fscale(1.0f/fnorm(nrm), nrm);
+	*(nrm+2) = -sqrt(rad*rad - x*x - y*y);
+	scale(1.0/norm(nrm), nrm);
 }
 
-void parabslope(const float x, const float y, const float f1, const float f2,
-		float *nrm) {
+void parabslope(const double x, const double y, const double f1, const double f2,
+		double *nrm) {
 	// Upside down parabaloid, hence the signs.
-	*nrm = -x/(2.0f*f1);
-	*(nrm+1) = -y/(2.0f*f2);
-	*(nrm+2) = -1.0f;
-	fscale(1.0f/fnorm(nrm), nrm);
+	*nrm = -x/(2.0*f1);
+	*(nrm+1) = -y/(2.0*f2);
+	*(nrm+2) = -1.0;
+	scale(1.0/norm(nrm), nrm);
 }
 
 
