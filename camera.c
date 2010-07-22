@@ -66,7 +66,7 @@ int locatecam(double *dots, double *dotsep, double distguess) {
 	int status;
 	size_t iter = 0;
 
-	gsl_vector_set_all(dists, (double) distguess);
+	gsl_vector_set_all(dists, distguess);
 
 	// Find directions from pixel values.
 	for (int i=0; i<3; i++) finddirpixcam((dots+i*2), (ph+i*3));
@@ -162,7 +162,7 @@ int locatecam(double *dots, double *dotsep, double distguess) {
 	int signum = 0;
 	for (int i=0; i<3; i++) {
 		for (int j=0; j<3; j++) {
-			gsl_matrix_set(ctran, i, j, (double) *(camtrans+i*3+j));
+			gsl_matrix_set(ctran, i, j, *(camtrans+i*3+j));
 			//printf("%f, ", *(camtrans+i*3+j));
 		}
 	}
@@ -171,7 +171,7 @@ int locatecam(double *dots, double *dotsep, double distguess) {
 	
 	for (int i=0; i<3; i++) {
 		for (int j=0; j<3; j++) {
-			*(caminvtrans+i*3+j) = (double) gsl_matrix_get(cinvtran, i, j);
+			*(caminvtrans+i*3+j) = gsl_matrix_get(cinvtran, i, j);
 			//printf("%f, ", *(caminvtrans+i*3+j));
 		}
 	}

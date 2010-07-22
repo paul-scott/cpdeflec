@@ -374,10 +374,10 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 
 	// Saving parameters into array.
 	double *spvars = malloc(4*sizeof(*spvars));
-	*(spvars) = (double) gsl_vector_get(sphfitvars, 0);
-	*(spvars+1) = (double) gsl_vector_get(sphfitvars, 1);
-	*(spvars+2) = (double) gsl_vector_get(sphfitvars, 2);
-	*(spvars+3) = (double) gsl_vector_get(sphfitvars, 3);
+	*(spvars) = gsl_vector_get(sphfitvars, 0);
+	*(spvars+1) = gsl_vector_get(sphfitvars, 1);
+	*(spvars+2) = gsl_vector_get(sphfitvars, 2);
+	*(spvars+3) = gsl_vector_get(sphfitvars, 3);
 
 	gsl_vector_free(sphfitvars);
 	sphfitvars = NULL;
@@ -394,8 +394,8 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	gsl_vector_set(parfitvars, 3, 0.0); // xrot
 	gsl_vector_set(parfitvars, 4, 0.0); // yrot
 	gsl_vector_set(parfitvars, 5, 0.0); // zrot
-	gsl_vector_set(parfitvars, 6, (double) *(spvars+3)/2.0); // f1
-	gsl_vector_set(parfitvars, 7, (double) *(spvars+3)/2.0); // f2
+	gsl_vector_set(parfitvars, 6, *(spvars+3)/2.0); // f1
+	gsl_vector_set(parfitvars, 7, *(spvars+3)/2.0); // f2
 
 	// Step size for first trial.
 	gsl_vector *parstep = gsl_vector_alloc(8);
@@ -417,20 +417,20 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 
 	// Saving parameters into array.
 	double *pavars = malloc(8*sizeof(*pavars));
-	*(pavars) = (double) gsl_vector_get(parfitvars, 0);
-	*(pavars+1) = (double) gsl_vector_get(parfitvars, 1);
-	*(pavars+2) = (double) gsl_vector_get(parfitvars, 2);
-	*(pavars+3) = (double) gsl_vector_get(parfitvars, 3);
-	*(pavars+4) = (double) gsl_vector_get(parfitvars, 4);
-	*(pavars+5) = (double) gsl_vector_get(parfitvars, 5);
-	*(pavars+6) = (double) gsl_vector_get(parfitvars, 6);
-	*(pavars+7) = (double) gsl_vector_get(parfitvars, 7);
+	*(pavars) = gsl_vector_get(parfitvars, 0);
+	*(pavars+1) = gsl_vector_get(parfitvars, 1);
+	*(pavars+2) = gsl_vector_get(parfitvars, 2);
+	*(pavars+3) = gsl_vector_get(parfitvars, 3);
+	*(pavars+4) = gsl_vector_get(parfitvars, 4);
+	*(pavars+5) = gsl_vector_get(parfitvars, 5);
+	*(pavars+6) = gsl_vector_get(parfitvars, 6);
+	*(pavars+7) = gsl_vector_get(parfitvars, 7);
 
 	gsl_vector_free(parfitvars);
 	parfitvars = NULL;
 
 	printf("Best fit paraboloid:\n");
-	printf("%f, %f, %f, %f, %f, %f, %f, %f\n", *(pavars), *(pavars+1),
+	printf("%lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf\n", *(pavars), *(pavars+1),
 			*(pavars+2), *(pavars+3), *(pavars+4), *(pavars+5), *(pavars+6),
 			*(pavars+7));
 	
