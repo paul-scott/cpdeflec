@@ -3,7 +3,8 @@
 #TESTING PARAMETER SENSITIVITY
 #./profile.o ../images/411-b-14.9-h.tiff ../images/411-b-14.9-v.tiff 1571 687 1547 2290 3037 814 ../images/sensitivity2
 
-./cpdeflec ../images/411-b-14.9-h.tiff ../images/411-b-14.9-v.tiff 1571 687 1547 2290 3037 814 ../images/411-b-14.9
+./cpdeflec ../images/fake-h.tiff ../images/fake-v.tiff 1460 713 1464 2062 2700 797 ../images/fake
+#./cpdeflec ../images/411-b-14.9-h.tiff ../images/411-b-14.9-v.tiff 1571 687 1547 2290 3037 814 ../images/411-b-14.9
 #./profile.o ../images/411-t-14.9-h.tiff ../images/411-t-14.9-v.tiff 1351 679 1325 2304 2824 820 ../images/411-t-14.9
 #./profile.o ../images/411-l-14.9-h.tiff ../images/411-l-14.9-v.tiff 1462 668 1436 2281 2923 806 ../images/411-l-14.9
 #./profile.o ../images/411-r-14.9-h.tiff ../images/411-r-14.9-v.tiff 1389 669 1366 2288 2856 807 ../images/411-r-14.9
