@@ -126,7 +126,7 @@ void minerror(double (*f)(const gsl_vector *va, void *params),
 
 	int status;
 	size_t iter = 0;
-	double size;
+	double size = 0;
 
 	do {
 		status = gsl_multimin_fminimizer_iterate(minzer);

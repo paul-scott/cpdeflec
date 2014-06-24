@@ -309,7 +309,7 @@ int func(const gsl_vector *p, void *params, gsl_vector *f) {
 	const double p0 = gsl_vector_get(p,0);
 	const double p1 = gsl_vector_get(p,1);
 	const double p2 = gsl_vector_get(p,2);
-	// NEED TO CHECK WHAT HAPPENS WHEN WE MULTIPLY A FLOAT WITH DOUBLE.
+
 	double f1 = sqrt(p0*p0-2*p0*p1*dot((par->ph),(par->ph+1*3))+p1*p1)-
 			(*(par->dsep));
 	double f2 = sqrt(p1*p1-2*p1*p2*dot((par->ph+1*3),(par->ph+2*3))+p2*p2)-
@@ -326,7 +326,7 @@ int func(const gsl_vector *p, void *params, gsl_vector *f) {
 
 void print_state(size_t iter, gsl_multiroot_fsolver *s) {
 	// Prints current state of solver.
-	printf("iter = %3u x = %.3f %.3f %.3f f(x) = %.3e %.3e %.3e\n",
+	printf("iter = %3lu x = %.3f %.3f %.3f f(x) = %.3e %.3e %.3e\n",
 			iter,
 			gsl_vector_get(s->x, 0),
 			gsl_vector_get(s->x, 1),

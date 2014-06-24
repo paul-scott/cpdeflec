@@ -52,7 +52,7 @@ void initpattern(const char *relfn) {
 	}
 	while (fgets(line, buffsize, relfile) != NULL) {
 		if (lcount >= relbins) break;
-		sscanf(line, "%f", (rel+lcount));
+		sscanf(line, "%lf", (rel+lcount));
 		lcount++;
 	}
 	fclose(relfile);
