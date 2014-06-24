@@ -306,6 +306,9 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	_TIFFfree(imdata);
 	imdata = NULL;
 
+	TIFFClose(image);
+	image = NULL;
+
 	// Need to now find best fitting curve.
 	// And fit ideal curve.
 
