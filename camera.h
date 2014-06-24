@@ -25,13 +25,25 @@
 
 #include "commath.h"
 
-extern double campos[3];
+typedef struct {
+	double pos[3]; // Camera position
+	double *trans; // Transform
+	double *itrans; // Inverse transform
 
-void initcamera();
-void freecamera();
-int objpixsize(double objsize, double objdist);
-int locatecam(double *dots, double *dotsep, double distguess);
-void findpix(const double *vec, int *pix);
-void finddirpix(const int x, const int y, double *dir);
+	// Get the principal values from photogrammetry calibration of camera.
+	int dims[2]; // Pixel dimensions
+	double pxsize; // Size of a pixel in mm
+	double prdist; // Pricipal distance of camera lens in mm
+	double soptc[2]; // Sensor optical centre in mm
+	double rdisto[2]; // Radial distortion parameters k3, k5
+} Camera;
+
+void initcamera(Camera *c);
+void freecamera(Camera *c);
+int objpixsize(const Camera *c, double objsize, double objdist);
+void locatecam(Camera *c, const double *dots, const double *dotsep,
+		double distguess);
+void findpix(const Camera *c, const double *vec, int *pix);
+void finddirpix(const Camera *c, const int x, const int y, double *dir);
 
 #endif /* INC_CAMERA_H */

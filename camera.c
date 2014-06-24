@@ -20,56 +20,46 @@
 /* Local Structures
  */
 typedef struct {
-	double *dsep; // Need to change to double??
-	double *ph;
+	const double *dsep;
+	const double *ph;
 } Funcpars;
 
-/* Camera parameters
- * *****************
- * Get the principal values from photogrammetry calibration of camera.
- */
-// Can probably pull w and h in from profile.c:
-static int camdims[2] = {4288,2848}; // Width and height of CCD array in pixels
-static double pxsize = 0.00554; // Size of a pixel in mm
-static double prdist = 20.53; // Pricipal distance of camera lens in mm
-static double soptc[2] = {0.1065,0.2374}; // Sensor optical centre in mm
-// Take negative of vms y component.
-
-static double rdisto[2] = {-2.6652e-4, 5.3876e-7}; // k3, k5
-//static double rdisto[2] = {0.0, 0.0}; // k3, k5
-
-double campos[3] = {0.0,0.0,0.0};
-static double *camtrans;
-static double *caminvtrans;
-
 void print_state(size_t iter, gsl_multiroot_fsolver *s);
-void finddirpixcam(const double *pix, double *dir);
+void finddirpixcam(const Camera *c, const double *pix, double *dir);
 int func(const gsl_vector *p, void *params, gsl_vector *f);
 
-void initcamera() {
-	camtrans = malloc(3*3*sizeof(*camtrans));
-	caminvtrans = malloc(3*3*sizeof(*caminvtrans));
+void initcamera(Camera *c)
+{
+	c->trans = malloc(3*3*sizeof(*c->trans));
+	c->itrans = malloc(3*3*sizeof(*c->itrans));
+	c->pos[0] = 0.;
+	c->pos[1] = 0.;
+	c->pos[2] = 0.;
 }
 
-void freecamera() {
-	free(camtrans);
-	camtrans = NULL;
-	free(caminvtrans);
-	caminvtrans = NULL;
+void freecamera(Camera *c)
+{
+	free(c->trans);
+	c->trans = NULL;
+	free(c->itrans);
+	c->itrans = NULL;
 }
 
-int objpixsize(double objsize, double objdist) {
-	return (int) ceil((objsize*prdist/objdist)/pxsize);
+int objpixsize(const Camera *c, double objsize, double objdist)
+{
+	return (int) ceil((objsize*c->prdist/objdist)/c->pxsize);
 }
 
-int locatecam(double *dots, double *dotsep, double distguess) {
+void locatecam(Camera *c, const double *dots, const double *dotsep,
+		double distguess)
+{
 	/* Assumes first point is origin and second is global y direction from
 	 * origin. Global x lies in plane of points 1-2-3.
 	 */
-	double *gxh = malloc(3*sizeof(*gxh));
-	double *gyh = malloc(3*sizeof(*gyh));
-	double *gzh = malloc(3*sizeof(*gzh));
-	double *fdists = malloc(3*sizeof(*fdists));
+	double gxh[3];
+	double gyh[3];
+	double gzh[3];
+	double fdists[3];
 
 	gsl_multiroot_fsolver *solver;
 	gsl_multiroot_function multif;
@@ -82,7 +72,7 @@ int locatecam(double *dots, double *dotsep, double distguess) {
 	gsl_vector_set_all(dists, distguess);
 
 	// Find directions from pixel values.
-	for (int i=0; i<3; i++) finddirpixcam((dots+i*2), (ph+i*3));
+	for (int i=0; i<3; i++) finddirpixcam(c, (dots+i*2), (ph+i*3));
 
 	params.dsep = dotsep;
 	params.ph = ph;
@@ -119,9 +109,9 @@ int locatecam(double *dots, double *dotsep, double distguess) {
 		iter++;
 	} while (status == GSL_CONTINUE && iter < 1000);
 
-	*(fdists) = gsl_vector_get(solver->x, 0);
-	*(fdists+1) = gsl_vector_get(solver->x, 1);// +15;
-	*(fdists+2) = gsl_vector_get(solver->x, 2);//+200;
+	fdists[0] = gsl_vector_get(solver->x, 0);
+	fdists[1] = gsl_vector_get(solver->x, 1);// +15;
+	fdists[2] = gsl_vector_get(solver->x, 2);//+200;
 
 	gsl_multiroot_fsolver_free(solver);
 	solver = NULL;
@@ -129,20 +119,20 @@ int locatecam(double *dots, double *dotsep, double distguess) {
 	// Find unit vectors of global coordinate system described in camera
 	// array system.
 	// Set dot direction vectors to positions.
-	scale(*(fdists), ph);
-	scale(*(fdists+1), ph+1*3);
-	scale(*(fdists+2), ph+2*3);
+	scale(fdists[0], ph);
+	scale(fdists[1], ph+1*3);
+	scale(fdists[2], ph+2*3);
 	
 	// Global y is from dot 0 to dot 1.
-	*(gyh) = *(ph+1*3) - *(ph);
-	*(gyh+1) = *(ph+1*3+1) - *(ph+1);
-	*(gyh+2) = *(ph+1*3+2) - *(ph+2);
+	gyh[0] = *(ph+1*3) - *(ph);
+	gyh[1] = *(ph+1*3+1) - *(ph+1);
+	gyh[2] = *(ph+1*3+2) - *(ph+2);
 	scale(1.0/norm(gyh), gyh);
 
 	// Appoximate x axis.
-	*(gxh) = *(ph+2*3) - *(ph);
-	*(gxh+1) = *(ph+2*3+1) - *(ph+1);
-	*(gxh+2) = *(ph+2*3+2) - *(ph+2);
+	gxh[0] = *(ph+2*3) - *(ph);
+	gxh[1] = *(ph+2*3+1) - *(ph+1);
+	gxh[2] = *(ph+2*3+2) - *(ph+2);
 
 	// Find z axis.
 	cross(gxh, gyh, gzh);
@@ -152,21 +142,22 @@ int locatecam(double *dots, double *dotsep, double distguess) {
 	cross(gyh, gzh, gxh);
 
 	// Set camera transform values.
-	*(camtrans) = *(gxh);
-	*(camtrans+1) = *(gxh+1);
-	*(camtrans+2) = *(gxh+2);
-	*(camtrans+1*3) = *(gyh);
-	*(camtrans+1*3+1) = *(gyh+1);
-	*(camtrans+1*3+2) = *(gyh+2);
-	*(camtrans+2*3) = *(gzh);
-	*(camtrans+2*3+1) = *(gzh+1);
-	*(camtrans+2*3+2) = *(gzh+2);
+	*(c->trans) = gxh[0];
+	*(c->trans+1) = gxh[1];
+	*(c->trans+2) = gxh[2];
+	*(c->trans+1*3) = gyh[0];
+	*(c->trans+1*3+1) = gyh[1];
+	*(c->trans+1*3+2) = gyh[2];
+	*(c->trans+2*3) = gzh[0];
+	*(c->trans+2*3+1) = gzh[1];
+	*(c->trans+2*3+2) = gzh[2];
 
 	// Set first ph vector to cam position.
 	scale(-1.0, ph); // Only uses first vector in ph
-	matxvec(camtrans, ph, campos); // Only uses first vector in ph
+	matxvec(c->trans, ph, c->pos); // Only uses first vector in ph
 
-	printf("Camera position: %f, %f, %f\n", *campos, *(campos+1), *(campos+2));
+	printf("Camera position: %f, %f, %f\n", *c->pos, *(c->pos+1),
+			*(c->pos+2));
 
 	// Calculate inverse camera transform.
 	gsl_matrix *ctran = gsl_matrix_alloc(3,3);
@@ -175,8 +166,8 @@ int locatecam(double *dots, double *dotsep, double distguess) {
 	int signum = 0;
 	for (int i=0; i<3; i++) {
 		for (int j=0; j<3; j++) {
-			gsl_matrix_set(ctran, i, j, *(camtrans+i*3+j));
-			//printf("%f, ", *(camtrans+i*3+j));
+			gsl_matrix_set(ctran, i, j, *(c->trans+i*3+j));
+			//printf("%f, ", *(c->trans+i*3+j));
 		}
 	}
 	gsl_linalg_LU_decomp(ctran, perm, &signum);
@@ -184,13 +175,13 @@ int locatecam(double *dots, double *dotsep, double distguess) {
 	
 	for (int i=0; i<3; i++) {
 		for (int j=0; j<3; j++) {
-			*(caminvtrans+i*3+j) = gsl_matrix_get(cinvtran, i, j);
-			//printf("%f, ", *(caminvtrans+i*3+j));
+			*(c->itrans+i*3+j) = gsl_matrix_get(cinvtran, i, j);
+			//printf("%f, ", *(c->itrans+i*3+j));
 		}
 	}
 
 	/* USED FOR CHECKING INVERSE
-	matxvec(caminvtrans, campos, (ph+3)); // Only uses first vector in ph
+	matxvec(c->itrans, c->pos, (ph+3)); // Only uses first vector in ph
 	printf("orig: %f, %f, %f\n", *ph, *(ph+1), *(ph+2));
 	printf("transed: %f, %f, %f\n", *(ph+3), *(ph+3+1), *(ph+3+2));
 	*/
@@ -207,68 +198,59 @@ int locatecam(double *dots, double *dotsep, double distguess) {
 
 	free(ph);
 	ph = NULL;
-
-	free(gxh);
-	gxh = NULL;
-	free(gyh);
-	gyh = NULL;
-	free(gzh);
-	gzh = NULL;
-	free(fdists);
-	fdists = NULL;
-
-	return 0; // Return zero if successful.
 }
 
 // Finds pixel that intercepts position vector.
-void findpix(const double *vec, int *pix) {
+void findpix(const Camera *c, const double *vec, int *pix)
+{
 	double *pos = malloc(3*sizeof(*pos)); // Position from camera
 	double *dir = malloc(3*sizeof(*dir));
 	// Changing origin.
-	*(pos) = *(vec) - *(campos);
-	*(pos+1) = *(vec+1) - *(campos+1);
-	*(pos+2) = *(vec+2) - *(campos+2);
+	*(pos) = *(vec) - *(c->pos);
+	*(pos+1) = *(vec+1) - *(c->pos+1);
+	*(pos+2) = *(vec+2) - *(c->pos+2);
 
 	scale(1.0/norm(pos), pos);
 	//printf("%f, %f, %f\n", *(pos), *(pos+1), *(pos+2));
 	// Transforming to camera coord system.
-	matxvec(caminvtrans, pos, dir);
+	matxvec(c->itrans, pos, dir);
 	free(pos);
 	pos = NULL;
 
 	// Position on array from optical centre.
 	// Might want to round here...
 	// Scalling direction vector.
-	scale(-prdist/(*(dir+2)), dir);
+	scale(-c->prdist/(*(dir+2)), dir);
 
 	// Applying radial distortion.
 	double radius = sqrt((*(dir))*(*(dir))+(*(dir+1))*(*(dir+1)));
-	double raderr = 1.0 + rdisto[0]*pow(radius,2.0) +
-			rdisto[1]*pow(radius,4.0);
+	double raderr = 1.0 + c->rdisto[0]*pow(radius,2.0) +
+			c->rdisto[1]*pow(radius,4.0);
 
 	*(dir) = (*(dir))*raderr;
 	*(dir+1) = (*(dir+1))*raderr;
 
-	*(pix) = (int) ((*(dir) + soptc[0])/pxsize + camdims[0]/2.0 - 0.5);
-	*(pix+1) = (int) ((*(dir+1) + soptc[1])/pxsize + camdims[1]/2.0 - 0.5);
+	*(pix) = (int) ((*(dir) + c->soptc[0])/c->pxsize + c->dims[0]/2.0 - 0.5);
+	*(pix+1) = (int) ((*(dir+1) + c->soptc[1])/c->pxsize + c->dims[1]/2.0 - 0.5);
 	
 	free(dir);
 	dir = NULL;
 }
 
 // Calculates global direction of pixel from camera.
-void finddirpix(const int x, const int y, double *dir) {
+void finddirpix(const Camera *c, const int x, const int y, double *dir)
+{
 	// Similar to finddirpixcam except it works on integers and transforms
 	// the direction vector to global coords.
 	double temp[3];
-	temp[0] = -(pxsize*(x - *(camdims)/2.0 + 0.5) - *(soptc));
-	temp[1] = -(pxsize*(y - *(camdims+1)/2.0 + 0.5) - *(soptc+1));
-	temp[2] = prdist;
+	temp[0] = -(c->pxsize*(x - *(c->dims)/2.0 + 0.5) - *(c->soptc));
+	temp[1] = -(c->pxsize*(y - *(c->dims+1)/2.0 + 0.5) - *(c->soptc+1));
+	temp[2] = c->prdist;
 
 	// Correcting for radial lens distortions.
 	double radius = sqrt(temp[0]*temp[0]+temp[1]*temp[1]);
-	double raderr = 1.0 - rdisto[0]*pow(radius,2.0) -
-			rdisto[1]*pow(radius,4.0);
+	double raderr = 1.0 - c->rdisto[0]*pow(radius,2.0) -
+			c->rdisto[1]*pow(radius,4.0);
 
 	temp[0] = temp[0]*raderr;
 	temp[1] = temp[1]*raderr;
@@ -276,26 +258,27 @@ void finddirpix(const int x, const int y, double *dir) {
 	// Normalizing vector.
 	scale(1.0/norm(temp),temp);
 
-	matxvec(camtrans, temp, dir);
+	matxvec(c->trans, temp, dir);
 }
 
 // Calculates camera coord direction of pixel from camera. Note the use of
 // double to get sub-pixel accuracy for locating.
-void finddirpixcam(const double *pix, double *dir) {
+void finddirpixcam(const Camera *c, const double *pix, double *dir)
+{
 	/* Define camera ax opposite to px and ay opposite to py. az is along
 	 * optical axis, therefore (x,y,z)=(0,0,0) optical centre. As position
 	 * of pixel in array increases, image pixel value increases.
 	 * Signs used here to get the direction right. Reverse signs and we
 	 * get position of pixel in the array from optical centre.
 	 */
-	*(dir) = -(pxsize*(*(pix) - *(camdims)/2.0 + 0.5) - *(soptc));
-	*(dir+1) = -(pxsize*(*(pix+1) - *(camdims+1)/2.0 + 0.5) - *(soptc+1));
-	*(dir+2) = prdist;
+	*(dir) = -(c->pxsize*(*(pix) - *(c->dims)/2.0 + 0.5) - *(c->soptc));
+	*(dir+1) = -(c->pxsize*(*(pix+1) - *(c->dims+1)/2.0 + 0.5) - *(c->soptc+1));
+	*(dir+2) = c->prdist;
 
 	// Correcting for radial lens distortions.
 	double radius = sqrt((*dir)*(*dir)+(*(dir+1))*(*(dir+1)));
-	double raderr = 1.0 - rdisto[0]*pow(radius,2.0) -
-			rdisto[1]*pow(radius,4.0);
+	double raderr = 1.0 - c->rdisto[0]*pow(radius,2.0) -
+			c->rdisto[1]*pow(radius,4.0);
 
 	*(dir) = (*(dir))*raderr;
 	*(dir+1) = (*(dir+1))*raderr;
@@ -304,7 +287,8 @@ void finddirpixcam(const double *pix, double *dir) {
 	scale(1.0/norm(dir),dir);
 }
 
-int func(const gsl_vector *p, void *params, gsl_vector *f) {
+int func(const gsl_vector *p, void *params, gsl_vector *f)
+{
 	Funcpars *par = (Funcpars *) params;
 	const double p0 = gsl_vector_get(p,0);
 	const double p1 = gsl_vector_get(p,1);
@@ -324,7 +308,8 @@ int func(const gsl_vector *p, void *params, gsl_vector *f) {
 	return GSL_SUCCESS;
 }
 
-void print_state(size_t iter, gsl_multiroot_fsolver *s) {
+void print_state(size_t iter, gsl_multiroot_fsolver *s)
+{
 	// Prints current state of solver.
 	printf("iter = %3lu x = %.3f %.3f %.3f f(x) = %.3e %.3e %.3e\n",
 			iter,

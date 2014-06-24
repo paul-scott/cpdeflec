@@ -76,16 +76,19 @@ double parabsqerr(const gsl_vector *vars, void *params)
 
 
 double paraboloid(const double x, const double y, const double f1,
-		const double f2) {
+		const double f2)
+{
 	return x*x/(4.0*f1) + y*y/(4.0*f2);
 }
 
-double sphere(const double x, const double y, const double rad) {
+double sphere(const double x, const double y, const double rad)
+{
 	// Need to make sure that region dosen't drift outside radius of circle.
 	return sqrt(rad*rad - x*x -	y*y);
 }
 
-void sphereslope(const double x, const double y, const double rad, double *nrm) {
+void sphereslope(const double x, const double y, const double rad, double *nrm)
+{
 	// Normal is equal to sphere centre minus sphere surface location.
 	*nrm = -x;
 	*(nrm+1) = -y;
@@ -94,7 +97,8 @@ void sphereslope(const double x, const double y, const double rad, double *nrm) 
 }
 
 void parabslope(const double x, const double y, const double f1, const double f2,
-		double *nrm) {
+		double *nrm)
+{
 	// Upside down parabaloid, hence the signs.
 	*nrm = -x/(2.0*f1);
 	*(nrm+1) = -y/(2.0*f2);
@@ -105,7 +109,8 @@ void parabslope(const double x, const double y, const double f1, const double f2
 
 void minerror(double (*f)(const gsl_vector *va, void *params),
 		const Errparams *pars, const size_t n, gsl_vector *vars,
-		const gsl_vector *stepsize) {
+		const gsl_vector *stepsize)
+{
 	gsl_multimin_fminimizer *minzer;
 	gsl_multimin_function multifunc;
 	// Allocate memory for minimizer and set to nelder-mead simplex.

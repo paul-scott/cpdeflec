@@ -20,17 +20,46 @@
 /* Mirror parameters
  * *****************
  */
-static double dotsize = 7.0; // Physiscal size of reference of dots in mm
-static double dotsep[3] = {1192.8986,1745.6891,1271.5304}; // Distance
+static const double dotsize = 7.0; // Physiscal size of reference of dots in mm
+static const double dotsep[3] = {1192.8986,1745.6891,1271.5304}; // Distance
 // between TL-BL, BL-TR, TR-TL
-static double corns[4][3] = {{61.010941,17.819132,-24.028367},
+static const double corns[4][3] = {{61.010941,17.819132,-24.028367},
 	{81.010941,1167.8191,-24.028367},
 	{1211.0109,1167.8191,-24.028367},
 	{1211.0109,17.819132,-24.028367}}; // Mirror boundary corners:
 // TL, BL, BR, TR
-static double camdistguess = 3000.0; // Guess of distance from mirror to camera
-static double startdepth = -24.028367; // Height of starting point.
-static char *relfn = "data/huerel.csv";
+
+/* Camera parameters
+ * *****************
+ * Get the principal values from photogrammetry calibration of camera.
+ */
+//static const int camdims[2] = {4288,2848}; // Width and height of CCD array in pixels
+//static const double pxsize = 0.00554; // Size of a pixel in mm
+//static const double prdist = 20.53; // Pricipal distance of camera lens in mm
+//static const double soptc[2] = {0.1065,0.2374}; // Sensor optical centre in mm
+//// Take negative of vms y component.
+//static const double rdisto[2] = {-2.6652e-4, 5.3876e-7}; // k3, k5
+
+///* Pattern parameters
+// * ******************
+// * Get locating values from photogrammetry. Position is horizontal edge of
+// * horiz rotated pattern, and vertical edge of vert rotated pattern.
+// */
+//// NOTE NEED TO FIND BETTER VALUE.
+//static const double patpos[3] = {635.77408,-364.31168,-2334.4864}; // Pos of
+//static const double patxoff = 4.6407583;
+//static const double patyoff = 3.2714379;
+//// pattern corner
+//// NOTE MIGHT WANT TO WORK ON NON ORTHOGONAL VECTORS.
+//static const double pattrans[3][3] = {{0.8542358,0.0018653,-0.5198823},
+//	{0.0015481,0.99998,0.0061316},
+//	{0.5198834,-0.0060427,0.8542159}}; // Coordinate system translation
+//const double segsize = 47.7; // Width of repeating pattern segment
+//static const int relbins = 274;
+
+static const double camdistguess = 3000.0; // Guess of distance from mirror to camera
+static const double startdepth = -24.028367; // Height of starting point.
+static const char *relfn = "data/huerel.csv";
 
 /* LOCAL FUNCTIONS
  * ***************
@@ -39,19 +68,21 @@ static char *relfn = "data/huerel.csv";
 void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn);
 void centroid(uint32 *im, uint32 w, uint32 h, int *idot, double *dot,
 		int dotpx);
-void calcpattvecs(const uint32 *im, const int iw, double *vecs, const int bw,
-		const int *ipix, const int *yb, const int *offs, const double idist,
-		const int orien);
-void transformpatt(double *vecs, const int bw, const int* yb);
-double extrapolate(const double *ppos, const double *psnrm, const double *ch);
-void solvesurface(double *vecs, double *poss, const int bw, const int *ipix,
-		const int *yb, const int *offs, const double idepth);
+void calcpattvecs(const Pattern *pat, const uint32 *im, const int iw,
+		double *vecs, const int bw, const int *ipix, const int *yb,
+		const int *offs, const double idist, const int orien);
+void transformpatt(const Pattern *pat, double *vecs, const int bw, const int* yb);
+double extrapolate(const Camera *cam, const double *ppos, const double *psnrm,
+		const double *ch);
+void solvesurface(const Camera *cam, double *vecs, double *poss, const int bw,
+		const int *ipix, const int *yb, const int *offs, const double idepth);
 void surfnorm(const double *vin, const double *vre, double *snrm);
 void slopeerror(const double *vecs, const double *poss, const int bw,
 		const int *yb, const int shape, const double *params, double *serr,
 		double *sestats);
 
-void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
+void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn)
+{
 	TIFF *image; // TIFF file pointer
 	uint32 wid, hei; // Image width and height
 	uint32 *imdata; // Pixel data loaded from TIFF image, y major
@@ -59,12 +90,41 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	double *dots = malloc(3*2*sizeof(*dots)); // Sub-pixel ref dot locations
 	int *pxcorns = malloc(4*2*sizeof(*pxcorns));
 
+	Camera camera;
+	Pattern pattern;
+
 	//printf("%d, %d\n%d, %d\n%d, %d\n", *(idots), *(idots+1), *(idots+2),
 	//	*(idots+3), *(idots+4), *(idots+5));
 
-	// Might want to move but initcamera needs to be run.
-	initcamera();
-	initpattern(relfn);
+	// Setup camera parameters
+	camera.dims[0] = 4288;
+	camera.dims[1] = 2848;
+	camera.pxsize = 0.00554;
+	camera.prdist = 20.53;
+	camera.soptc[0] = 0.1065;
+	camera.soptc[1] = 0.2374;
+	camera.rdisto[0] = -2.6652e-4;
+	camera.rdisto[1] = 5.3876e-7;
+	initcamera(&camera);
+
+	// Setup pattern parameters
+	pattern.relbins = 274;
+	pattern.pos[0] = 635.77408;
+	pattern.pos[1] = -364.31168;
+	pattern.pos[2] = -2334.4864;
+	pattern.xoff = 4.6407583;
+	pattern.yoff = 3.2714379;
+	pattern.trans[0][0] = 0.8542358;
+	pattern.trans[0][1] = 0.0018653;
+	pattern.trans[0][2] = -0.5198823;
+	pattern.trans[1][0] = 0.0015481;
+	pattern.trans[1][1] = 0.99998;
+	pattern.trans[1][2] = 0.0061316;
+	pattern.trans[2][0] = 0.5198834;
+	pattern.trans[2][1] = -0.0060427;
+	pattern.trans[2][2] = 0.8542159;
+	pattern.segsize = 47.7;
+	initpattern(&pattern, relfn);
 
 	image = TIFFOpen(imfnh, "r");
 	if (image == NULL) {
@@ -93,7 +153,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	image = NULL;
 
 	// Find centre of dots.
-	dotpx = objpixsize(dotsize, camdistguess);
+	dotpx = objpixsize(&camera, dotsize, camdistguess);
 	for (int i=0; i<3; i++) {
 		centroid(imdata, wid, hei, (idots+i*2), (dots+i*2), dotpx);
 	}
@@ -103,21 +163,18 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 		*(dots+3), *(dots+4), *(dots+5));
 
 	// Locating position of camera.
-	if (locatecam(dots, dotsep, camdistguess) != 0) {
-		printf("Failed to locate camera, exiting...\n");
-		exit(1);
-	}
+	locatecam(&camera, dots, dotsep, camdistguess);
 	printf("Camera successfully located.\n");
 
 	printf("Bouding corners:\n");
 	// Finding pixels that correspond to mirror bounding corners. 
 	for (int i=0; i<4; i++) {
-		findpix(corns[i], (pxcorns+i*2));
+		findpix(&camera, corns[i], (pxcorns+i*2));
 		printf("%d, %d\n", *(pxcorns+i*2), *(pxcorns+i*2+1));
 	}
 
 	//double tempdirec[3];
-	//finddirpix(2129, 2918, tempdirec);
+	//finddirpix(&camera, 2129, 2918, tempdirec);
 	//printf("%f, %f, %f\n", tempdirec[0], tempdirec[1], tempdirec[2]);
 
 	free(dots);
@@ -279,8 +336,8 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	}
 	 
 	// Start looking in first segment.
-	calcpattvecs(imdata, wid, vecs, xlen, pxcorns, ybound, offset,
-			0.5*segsize, 1);
+	calcpattvecs(&pattern, imdata, wid, vecs, xlen, pxcorns, ybound, offset,
+			0.5*pattern.segsize, 1);
 	printf("Information extracted from horizontal image.\n");
 
 	// Loading vertical image.
@@ -299,8 +356,8 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	printf("Vertical image loaded\n");
 
 	// Start looking in first segment.
-	calcpattvecs(imdata, wid, vecs, xlen, pxcorns, ybound, offset,
-			0.5*segsize, 0);
+	calcpattvecs(&pattern, imdata, wid, vecs, xlen, pxcorns, ybound, offset,
+			0.5*pattern.segsize, 0);
 	printf("Information extracted from vertical image.\n");
 
 	_TIFFfree(imdata);
@@ -314,7 +371,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 
 	// Piece together pattern vector components and transform into global
 	// coordinates.
-	transformpatt(vecs, xlen, ybound);
+	transformpatt(&pattern, vecs, xlen, ybound);
 	printf("Pattern vectors translated to global coords.\n");
 
 	// Set up array of vectors to hold mirror surface positions.
@@ -337,7 +394,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	printf("Initial pixel: %d, %d\n", initpixi[0], initpixi[1]);
 	*/
 
-	solvesurface(vecs, poss, xlen, pxcorns, ybound, offset, startdepth);
+	solvesurface(&camera, vecs, poss, xlen, pxcorns, ybound, offset, startdepth);
 	printf("Surface solved.\n");
 
 	// Centring data points about axis.
@@ -590,24 +647,25 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn) {
 	free(poss);
 	poss = NULL;
 
-	freecamera();
-	freepattern();
+	freecamera(&camera);
+	freepattern(&pattern);
 }
 
 // Determines which part of pattern is reflected for each pixel.
-void calcpattvecs(const uint32 *im, const int iw, double *vecs, const int bw,
-		const int *ipix, const int *yb, const int *offs, const double idist,
-		const int orien) {
+void calcpattvecs(const Pattern *pat, const uint32 *im, const int iw,
+		double *vecs, const int bw, const int *ipix, const int *yb,
+		const int *offs, const double idist, const int orien)
+{
 	// Orientation 1 is horizontal, 0 is vertical.
 
 	// Working out first point.
-	*(vecs+((*(ipix+1))*bw+*ipix)*3+orien) = getdist((im+(*(ipix+1)+
+	*(vecs+((*(ipix+1))*bw+*ipix)*3+orien) = getdist(pat, (im+(*(ipix+1)+
 									*(offs+1))*iw+*(ipix)+*offs), idist, orien);
 	// Run down first column, shouldn't need to go up since at corner.
 	for (int y=*(ipix+1)+1; y<=*(yb+(*ipix)*2+1); y++) {
 		// Using previously calculated distance.
 		double pdist = *(vecs+((y-1)*bw+*ipix)*3+orien);
-		*(vecs+(y*bw+*ipix)*3+orien) = getdist((im+(y+*(offs+1))*iw+*(ipix)+
+		*(vecs+(y*bw+*ipix)*3+orien) = getdist(pat, (im+(y+*(offs+1))*iw+*(ipix)+
 									*offs), pdist, orien);
 	}
 
@@ -617,7 +675,7 @@ void calcpattvecs(const uint32 *im, const int iw, double *vecs, const int bw,
 		int iy = imin(*(yb+x*2+1),imax(*(ipix+1),*(yb+x*2)));
 		// Determining distance for starting point.
 		double pdist = *(vecs+(iy*bw+x+1)*3+orien);
-		*(vecs+(iy*bw+x)*3+orien) = getdist((im+(iy+*(offs+1))*iw+x+*offs),
+		*(vecs+(iy*bw+x)*3+orien) = getdist(pat, (im+(iy+*(offs+1))*iw+x+*offs),
 										pdist, orien);
 		// Shouldn't need to move up.
 
@@ -638,7 +696,7 @@ void calcpattvecs(const uint32 *im, const int iw, double *vecs, const int bw,
 			}
 			pdist = pdist/count; // Normalizing
 
-			*(vecs+(y*bw+x)*3+orien) = getdist((im+(y+*(offs+1))*iw+x+*offs),
+			*(vecs+(y*bw+x)*3+orien) = getdist(pat, (im+(y+*(offs+1))*iw+x+*offs),
 										pdist, orien);
 		}
 	}
@@ -649,7 +707,7 @@ void calcpattvecs(const uint32 *im, const int iw, double *vecs, const int bw,
 		int iy = imin(*(yb+x*2+1),imax(*(ipix+1),*(yb+x*2)));
 		// Determining distance for starting point.
 		double pdist = *(vecs+(iy*bw+x-1)*3+orien);
-		*(vecs+(iy*bw+x)*3+orien) = getdist((im+(iy+*(offs+1))*iw+x+*offs),
+		*(vecs+(iy*bw+x)*3+orien) = getdist(pat, (im+(iy+*(offs+1))*iw+x+*offs),
 										pdist, orien);
 		// Working up.
 		for (int y=iy-1; y>=*(yb+x*2); y--) {
@@ -668,7 +726,7 @@ void calcpattvecs(const uint32 *im, const int iw, double *vecs, const int bw,
 			}
 			pdist = pdist/count; // Normalizing
 
-			*(vecs+(y*bw+x)*3+orien) = getdist((im+(y+*(offs+1))*iw+x+*offs),
+			*(vecs+(y*bw+x)*3+orien) = getdist(pat, (im+(y+*(offs+1))*iw+x+*offs),
 										pdist, orien);
 		}
 		// Working down.
@@ -688,33 +746,35 @@ void calcpattvecs(const uint32 *im, const int iw, double *vecs, const int bw,
 			}
 			pdist = pdist/count; // Normalizing
 
-			*(vecs+(y*bw+x)*3+orien) = getdist((im+(y+*(offs+1))*iw+x+*offs),
+			*(vecs+(y*bw+x)*3+orien) = getdist(pat, (im+(y+*(offs+1))*iw+x+*offs),
 										pdist, orien);
 		}
 	}
 }
 
-void transformpatt(double *vecs, const int bw, const int* yb) {
+void transformpatt(const Pattern *pat, double *vecs, const int bw, const int* yb)
+{
 	for (int x=0; x<bw; x++) {
 		for (int y=*(yb+x*2); y<=*(yb+x*2+1); y++) {
-			transpattvec((vecs+(y*bw+x)*3));
+			transpattvec(pat, (vecs+(y*bw+x)*3));
 		}
 	}
 }
 
-void solvesurface(double *vecs, double *poss, const int bw, const int *ipix,
-		const int *yb, const int *offs, const double idepth) {
+void solvesurface(const Camera *cam, double *vecs, double *poss, const int bw,
+		const int *ipix, const int *yb, const int *offs, const double idepth)
+{
 	// After position and norm estimated, could redo extrapolation taking,
 	// into account the estimated norm.
 	double ch[3]; // Direction from camera to point
 	double ph[3]; // Direction from pattern to point
 	// Calculating direction from camera to point.
-	finddirpix(*(ipix)+*(offs), *(ipix+1)+*(offs+1), ch);
+	finddirpix(cam, *(ipix)+*(offs), *(ipix+1)+*(offs+1), ch);
 	// Estimating position of point.
-	*(poss+((*(ipix+1))*bw+*ipix)*3) = ch[0]*(idepth-campos[2])/ch[2] +
-		campos[0];
-	*(poss+((*(ipix+1))*bw+*ipix)*3+1) = ch[1]*(idepth-campos[2])/ch[2] +
-		campos[1];
+	*(poss+((*(ipix+1))*bw+*ipix)*3) = ch[0]*(idepth-cam->pos[2])/ch[2] +
+		cam->pos[0];
+	*(poss+((*(ipix+1))*bw+*ipix)*3+1) = ch[1]*(idepth-cam->pos[2])/ch[2] +
+		cam->pos[1];
 	*(poss+((*(ipix+1))*bw+*ipix)*3+2) = idepth;
 
 	ph[0] = *(vecs+((*(ipix+1))*bw+*ipix)*3) -
@@ -729,12 +789,12 @@ void solvesurface(double *vecs, double *poss, const int bw, const int *ipix,
 	
 	// Working up starting column.
 	for (int y=*(ipix+1)-1; y>=*(yb+(*ipix)*2); y--) {
-		finddirpix(*(ipix)+*(offs), y+*(offs+1), ch);
-		double dist = extrapolate((poss+((y+1)*bw+*ipix)*3),
+		finddirpix(cam, *(ipix)+*(offs), y+*(offs+1), ch);
+		double dist = extrapolate(cam, (poss+((y+1)*bw+*ipix)*3),
 				(vecs+((y+1)*bw+*ipix)*3), ch);
-		*(poss+(y*bw+*ipix)*3) = dist*ch[0]+ campos[0];
-		*(poss+(y*bw+*ipix)*3+1) = dist*ch[1]+ campos[1];
-		*(poss+(y*bw+*ipix)*3+2) = dist*ch[2]+ campos[2];
+		*(poss+(y*bw+*ipix)*3) = dist*ch[0]+ cam->pos[0];
+		*(poss+(y*bw+*ipix)*3+1) = dist*ch[1]+ cam->pos[1];
+		*(poss+(y*bw+*ipix)*3+2) = dist*ch[2]+ cam->pos[2];
 		ph[0] = *(vecs+(y*bw+*ipix)*3) -
 			*(poss+(y*bw+*ipix)*3);
 		ph[1] = *(vecs+(y*bw+*ipix)*3+1) -
@@ -747,12 +807,12 @@ void solvesurface(double *vecs, double *poss, const int bw, const int *ipix,
 
 	// Working way down starting column.
 	for (int y=*(ipix+1)+1; y<=*(yb+(*ipix)*2+1); y++) {
-		finddirpix(*(ipix)+*(offs), y+*(offs+1), ch);
-		double dist = extrapolate((poss+((y-1)*bw+*ipix)*3),
+		finddirpix(cam, *(ipix)+*(offs), y+*(offs+1), ch);
+		double dist = extrapolate(cam, (poss+((y-1)*bw+*ipix)*3),
 				(vecs+((y-1)*bw+*ipix)*3), ch);
-		*(poss+(y*bw+*ipix)*3) = dist*ch[0]+ campos[0];
-		*(poss+(y*bw+*ipix)*3+1) = dist*ch[1]+ campos[1];
-		*(poss+(y*bw+*ipix)*3+2) = dist*ch[2]+ campos[2];
+		*(poss+(y*bw+*ipix)*3) = dist*ch[0]+ cam->pos[0];
+		*(poss+(y*bw+*ipix)*3+1) = dist*ch[1]+ cam->pos[1];
+		*(poss+(y*bw+*ipix)*3+2) = dist*ch[2]+ cam->pos[2];
 		ph[0] = *(vecs+(y*bw+*ipix)*3) -
 			*(poss+(y*bw+*ipix)*3);
 		ph[1] = *(vecs+(y*bw+*ipix)*3+1) -
@@ -767,12 +827,12 @@ void solvesurface(double *vecs, double *poss, const int bw, const int *ipix,
 	for (int x=*ipix-1; x>=0; x--) {
 		// Find a good starting point.
 		int iy = imin(*(yb+x*2+1),imax(*(ipix+1),*(yb+x*2)));
-		finddirpix(x+*(offs), iy+*(offs+1), ch);
-		double dist = extrapolate((poss+(iy*bw+x+1)*3),
+		finddirpix(cam, x+*(offs), iy+*(offs+1), ch);
+		double dist = extrapolate(cam, (poss+(iy*bw+x+1)*3),
 				(vecs+(iy*bw+x+1)*3), ch);
-		*(poss+(iy*bw+x)*3) = dist*ch[0]+ campos[0];
-		*(poss+(iy*bw+x)*3+1) = dist*ch[1]+ campos[1];
-		*(poss+(iy*bw+x)*3+2) = dist*ch[2]+ campos[2];
+		*(poss+(iy*bw+x)*3) = dist*ch[0]+ cam->pos[0];
+		*(poss+(iy*bw+x)*3+1) = dist*ch[1]+ cam->pos[1];
+		*(poss+(iy*bw+x)*3+2) = dist*ch[2]+ cam->pos[2];
 		ph[0] = *(vecs+(iy*bw+x)*3) -
 			*(poss+(iy*bw+x)*3);
 		ph[1] = *(vecs+(iy*bw+x)*3+1) -
@@ -785,23 +845,23 @@ void solvesurface(double *vecs, double *poss, const int bw, const int *ipix,
 		// Working up.
 		for (int y=iy-1; y>=*(yb+x*2); y--) {
 			int count = 1;
-			finddirpix(x+*(offs), y+*(offs+1), ch);
-			dist = extrapolate((poss+((y+1)*bw+x)*3),
+			finddirpix(cam, x+*(offs), y+*(offs+1), ch);
+			dist = extrapolate(cam, (poss+((y+1)*bw+x)*3),
 					(vecs+((y+1)*bw+x)*3), ch);
 			if (*(poss+((y+1)*bw+x+1)*3) != -1.0) {
-				dist = dist + extrapolate((poss+((y+1)*bw+x+1)*3),
+				dist = dist + extrapolate(cam, (poss+((y+1)*bw+x+1)*3),
 							(vecs+((y+1)*bw+x+1)*3), ch);
 				count++;
 			}
 			if (*(poss+(y*bw+x+1)*3) != -1.0) {
-				dist = dist + extrapolate((poss+(y*bw+x+1)*3),
+				dist = dist + extrapolate(cam, (poss+(y*bw+x+1)*3),
 							(vecs+(y*bw+x+1)*3), ch);
 				count++;
 			}
 			dist = dist/count;
-			*(poss+(y*bw+x)*3) = dist*ch[0]+ campos[0];
-			*(poss+(y*bw+x)*3+1) = dist*ch[1]+ campos[1];
-			*(poss+(y*bw+x)*3+2) = dist*ch[2]+ campos[2];
+			*(poss+(y*bw+x)*3) = dist*ch[0]+ cam->pos[0];
+			*(poss+(y*bw+x)*3+1) = dist*ch[1]+ cam->pos[1];
+			*(poss+(y*bw+x)*3+2) = dist*ch[2]+ cam->pos[2];
 			ph[0] = *(vecs+(y*bw+x)*3) -
 				*(poss+(y*bw+x)*3);
 			ph[1] = *(vecs+(y*bw+x)*3+1) -
@@ -815,23 +875,23 @@ void solvesurface(double *vecs, double *poss, const int bw, const int *ipix,
 		// Working down.
 		for (int y=iy+1; y<=*(yb+x*2+1); y++) {
 			int count = 1;
-			finddirpix(x+*(offs), y+*(offs+1), ch);
-			dist = extrapolate((poss+((y-1)*bw+x)*3),
+			finddirpix(cam, x+*(offs), y+*(offs+1), ch);
+			dist = extrapolate(cam, (poss+((y-1)*bw+x)*3),
 					(vecs+((y-1)*bw+x)*3), ch);
 			if (*(poss+((y-1)*bw+x+1)*3) != -1.0) {
-				dist = dist + extrapolate((poss+((y-1)*bw+x+1)*3),
+				dist = dist + extrapolate(cam, (poss+((y-1)*bw+x+1)*3),
 							(vecs+((y-1)*bw+x+1)*3), ch);
 				count++;
 			}
 			if (*(poss+(y*bw+x+1)*3) != -1.0) {
-				dist = dist + extrapolate((poss+(y*bw+x+1)*3),
+				dist = dist + extrapolate(cam, (poss+(y*bw+x+1)*3),
 							(vecs+(y*bw+x+1)*3), ch);
 				count++;
 			}
 			dist = dist/count;
-			*(poss+(y*bw+x)*3) = dist*ch[0]+ campos[0];
-			*(poss+(y*bw+x)*3+1) = dist*ch[1]+ campos[1];
-			*(poss+(y*bw+x)*3+2) = dist*ch[2]+ campos[2];
+			*(poss+(y*bw+x)*3) = dist*ch[0]+ cam->pos[0];
+			*(poss+(y*bw+x)*3+1) = dist*ch[1]+ cam->pos[1];
+			*(poss+(y*bw+x)*3+2) = dist*ch[2]+ cam->pos[2];
 			ph[0] = *(vecs+(y*bw+x)*3) -
 				*(poss+(y*bw+x)*3);
 			ph[1] = *(vecs+(y*bw+x)*3+1) -
@@ -847,12 +907,12 @@ void solvesurface(double *vecs, double *poss, const int bw, const int *ipix,
 	for (int x=*ipix+1; x<bw; x++) {
 		// Find a good starting point.
 		int iy = imin(*(yb+x*2+1),imax(*(ipix+1),*(yb+x*2)));
-		finddirpix(x+*(offs), iy+*(offs+1), ch);
-		double dist = extrapolate((poss+(iy*bw+x-1)*3),
+		finddirpix(cam, x+*(offs), iy+*(offs+1), ch);
+		double dist = extrapolate(cam, (poss+(iy*bw+x-1)*3),
 				(vecs+(iy*bw+x-1)*3), ch);
-		*(poss+(iy*bw+x)*3) = dist*ch[0]+ campos[0];
-		*(poss+(iy*bw+x)*3+1) = dist*ch[1]+ campos[1];
-		*(poss+(iy*bw+x)*3+2) = dist*ch[2]+ campos[2];
+		*(poss+(iy*bw+x)*3) = dist*ch[0]+ cam->pos[0];
+		*(poss+(iy*bw+x)*3+1) = dist*ch[1]+ cam->pos[1];
+		*(poss+(iy*bw+x)*3+2) = dist*ch[2]+ cam->pos[2];
 		ph[0] = *(vecs+(iy*bw+x)*3) -
 			*(poss+(iy*bw+x)*3);
 		ph[1] = *(vecs+(iy*bw+x)*3+1) -
@@ -865,23 +925,23 @@ void solvesurface(double *vecs, double *poss, const int bw, const int *ipix,
 		// Working up.
 		for (int y=iy-1; y>=*(yb+x*2); y--) {
 			int count = 1;
-			finddirpix(x+*(offs), y+*(offs+1), ch);
-			dist = extrapolate((poss+((y+1)*bw+x)*3),
+			finddirpix(cam, x+*(offs), y+*(offs+1), ch);
+			dist = extrapolate(cam, (poss+((y+1)*bw+x)*3),
 					(vecs+((y+1)*bw+x)*3), ch);
 			if (*(poss+((y+1)*bw+x-1)*3) != -1.0) {
-				dist = dist + extrapolate((poss+((y+1)*bw+x-1)*3),
+				dist = dist + extrapolate(cam, (poss+((y+1)*bw+x-1)*3),
 							(vecs+((y+1)*bw+x-1)*3), ch);
 				count++;
 			}
 			if (*(poss+(y*bw+x-1)*3) != -1.0) {
-				dist = dist + extrapolate((poss+(y*bw+x-1)*3),
+				dist = dist + extrapolate(cam, (poss+(y*bw+x-1)*3),
 							(vecs+(y*bw+x-1)*3), ch);
 				count++;
 			}
 			dist = dist/count;
-			*(poss+(y*bw+x)*3) = dist*ch[0]+ campos[0];
-			*(poss+(y*bw+x)*3+1) = dist*ch[1]+ campos[1];
-			*(poss+(y*bw+x)*3+2) = dist*ch[2]+ campos[2];
+			*(poss+(y*bw+x)*3) = dist*ch[0]+ cam->pos[0];
+			*(poss+(y*bw+x)*3+1) = dist*ch[1]+ cam->pos[1];
+			*(poss+(y*bw+x)*3+2) = dist*ch[2]+ cam->pos[2];
 			ph[0] = *(vecs+(y*bw+x)*3) -
 				*(poss+(y*bw+x)*3);
 			ph[1] = *(vecs+(y*bw+x)*3+1) -
@@ -894,23 +954,23 @@ void solvesurface(double *vecs, double *poss, const int bw, const int *ipix,
 		// Working down.
 		for (int y=iy+1; y<=*(yb+x*2+1); y++) {
 			int count = 1;
-			finddirpix(x+*(offs), y+*(offs+1), ch);
-			dist = extrapolate((poss+((y-1)*bw+x)*3),
+			finddirpix(cam, x+*(offs), y+*(offs+1), ch);
+			dist = extrapolate(cam, (poss+((y-1)*bw+x)*3),
 					(vecs+((y-1)*bw+x)*3), ch);
 			if (*(poss+((y-1)*bw+x-1)*3) != -1.0) {
-				dist = dist + extrapolate((poss+((y-1)*bw+x-1)*3),
+				dist = dist + extrapolate(cam, (poss+((y-1)*bw+x-1)*3),
 							(vecs+((y-1)*bw+x-1)*3), ch);
 				count++;
 			}
 			if (*(poss+(y*bw+x-1)*3) != -1.0) {
-				dist = dist + extrapolate((poss+(y*bw+x-1)*3),
+				dist = dist + extrapolate(cam, (poss+(y*bw+x-1)*3),
 							(vecs+(y*bw+x-1)*3), ch);
 				count++;
 			}
 			dist = dist/count;
-			*(poss+(y*bw+x)*3) = dist*ch[0]+ campos[0];
-			*(poss+(y*bw+x)*3+1) = dist*ch[1]+ campos[1];
-			*(poss+(y*bw+x)*3+2) = dist*ch[2]+ campos[2];
+			*(poss+(y*bw+x)*3) = dist*ch[0]+ cam->pos[0];
+			*(poss+(y*bw+x)*3+1) = dist*ch[1]+ cam->pos[1];
+			*(poss+(y*bw+x)*3+2) = dist*ch[2]+ cam->pos[2];
 			ph[0] = *(vecs+(y*bw+x)*3) -
 				*(poss+(y*bw+x)*3);
 			ph[1] = *(vecs+(y*bw+x)*3+1) -
@@ -923,7 +983,8 @@ void solvesurface(double *vecs, double *poss, const int bw, const int *ipix,
 	}
 }
 
-void surfnorm(const double *vin, const double *vre, double *snrm) {
+void surfnorm(const double *vin, const double *vre, double *snrm)
+{
 	// vin - incident ray, vre - reflected ray.
 	*(snrm) = *(vre) - *(vin);
 	*(snrm+1) = *(vre+1) - *(vin+1);
@@ -931,14 +992,18 @@ void surfnorm(const double *vin, const double *vre, double *snrm) {
 	scale(1.0/norm(snrm), snrm);
 }
 
-double extrapolate(const double *ppos, const double *psnrm, const double *ch) {
-	double pc[3] = {*ppos-campos[0],*(ppos+1)-campos[1],*(ppos+2)-campos[2]};
+double extrapolate(const Camera *cam, const double *ppos, const double *psnrm,
+		const double *ch)
+{
+	double pc[3] = {*ppos-cam->pos[0], *(ppos+1)-cam->pos[1],
+		*(ppos+2)-cam->pos[2]};
 	return dot(pc,psnrm)/dot(ch,psnrm);
 }
 
 void slopeerror(const double *vecs, const double *poss, const int bw,
 		const int *yb, const int shape, const double *params, double *serr,
-		double *sestats) {
+		double *sestats)
+{
 	// Calculating slope errors relative to sphere.
 	// Shape 0 is sphere, shape 1 is elliptic paraboloid.
 	// Parameters are in terms of acting on raw data.
@@ -1035,7 +1100,8 @@ void slopeerror(const double *vecs, const double *poss, const int bw,
 }
 
 void centroid(uint32 *im, uint32 w, uint32 h, int *idot, double *dot,
-		int dotpx) {
+		int dotpx)
+{
 
 	double *region; // Region of pixels about dot guess
 	int regw, regh; // Region width and height
@@ -1111,11 +1177,13 @@ void centroid(uint32 *im, uint32 w, uint32 h, int *idot, double *dot,
 	*(dot+1) = ymean + lowy;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 	printf("Reading in arguments...\n");
 
 	if (argc != 10) {
-		printf("Incorrect number of arguments.\n\nprofile.o himage vimage p1x p1y p2x p2y p3x p3y outfn\n\n");
+		printf("Incorrect number of arguments.\n\n"
+				"profile.o himage vimage p1x p1y p2x p2y p3x p3y outfn\n\n");
 		exit(1);
 	}
 

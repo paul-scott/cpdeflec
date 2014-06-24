@@ -25,11 +25,22 @@
 
 #include "commath.h"
 
-extern double segsize;
+// Get locating values from photogrammetry. Position is horizontal edge of
+// horiz rotated pattern, and vertical edge of vert rotated pattern.
+typedef struct {
+	double *rel; // Pattern colour to distance relation
+	double relbins; // Number of bins in relation
+	double pos[3]; // Pattern position
+	double xoff; // Pattern start offset
+	double yoff;
+	double trans[3][3]; // Transform
+	double segsize; // Width of repeating pattern segment
+} Pattern;
 
-void initpattern(const char *relfn);
-void freepattern();
-double getdist(const uint32 *pix, const double pdist, const int orien);
-void transpattvec(double *vec);
+void initpattern(Pattern *p, const char *relfn);
+void freepattern(Pattern *p);
+double getdist(const Pattern *p, const uint32 *pix, const double pdist,
+		const int orien);
+void transpattvec(const Pattern *p, double *vec);
 
 #endif /* INC_PATTERN_H */
