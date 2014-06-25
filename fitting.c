@@ -16,6 +16,12 @@
  */
 
 #include "fitting.h"
+#include "commath.h"
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <math.h>
+#include <gsl/gsl_multimin.h>
 
 double sphesqerr(const gsl_vector *vars, void *params)
 {
@@ -49,7 +55,7 @@ double parabsqerr(const gsl_vector *vars, void *params)
 	int xlen = par->xlen;
 	int *yb = par->yb;
 	double err = 0.0;
-	double *rotm = malloc(9*sizeof(*rotm));
+	double rotm[9];
 	double tvec1[3];
 	double tvec2[3];
 	// Work out rotations matrix.
@@ -69,8 +75,6 @@ double parabsqerr(const gsl_vector *vars, void *params)
 					gsl_vector_get(vars, 6), gsl_vector_get(vars, 7))),2.0);
 		}
 	}
-	free(rotm);
-	rotm = NULL;
 	return err;
 }
 

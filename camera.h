@@ -18,13 +18,6 @@
 #ifndef INC_CAMERA_H
 #define INC_CAMERA_H
 
-#include <math.h>
-#include <gsl/gsl_vector.h>
-#include <gsl/gsl_multiroots.h>
-#include <gsl/gsl_linalg.h>
-
-#include "commath.h"
-
 typedef struct {
 	double pos[3]; // Camera position
 	double *trans; // Transform
@@ -44,6 +37,6 @@ int objpixsize(const Camera *c, double objsize, double objdist);
 void locatecam(Camera *c, const double *dots, const double *dotsep,
 		double distguess);
 void findpix(const Camera *c, const double *vec, int *pix);
-void finddirpix(const Camera *c, const int x, const int y, double *dir);
+void finddirpix(const Camera *c, int x, int y, double *dir);
 
 #endif /* INC_CAMERA_H */

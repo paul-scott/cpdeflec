@@ -15,7 +15,18 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "cpdeflec.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <math.h>
+#include <string.h>
+#include <tiffio.h>
+
+#include "commath.h"
+#include "camera.h"
+#include "pattern.h"
+#include "fitting.h"
 
 /* Mirror parameters
  * *****************
@@ -65,10 +76,9 @@ static const char *relfn = "data/huerel.csv";
  * ***************
  * Declared here instead of header.
  */
-void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn);
-void centroid(uint32 *im, uint32 w, uint32 h, int *idot, double *dot,
-		int dotpx);
-void calcpattvecs(const Pattern *pat, const uint32 *im, const int iw,
+void centroid(const uint32_t *im, uint32_t w, uint32_t h, const int *idot,
+		double *dot, int dotpx);
+void calcpattvecs(const Pattern *pat, const uint32_t *im, const int iw,
 		double *vecs, const int bw, const int *ipix, const int *yb,
 		const int *offs, const double idist, const int orien);
 void transformpatt(const Pattern *pat, double *vecs, const int bw, const int* yb);
@@ -81,11 +91,12 @@ void slopeerror(const double *vecs, const double *poss, const int bw,
 		const int *yb, const int shape, const double *params, double *serr,
 		double *sestats);
 
-void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn)
+void solveprofile(const char *imfnh, const char *imfnv, const int *idots,
+		const char *outfn)
 {
 	TIFF *image; // TIFF file pointer
-	uint32 wid, hei; // Image width and height
-	uint32 *imdata; // Pixel data loaded from TIFF image, y major
+	uint32_t wid, hei; // Image width and height
+	uint32_t *imdata; // Pixel data loaded from TIFF image, y major
 	int dotpx; // Approximate width of ref dot in pixels
 	double *dots = malloc(3*2*sizeof(*dots)); // Sub-pixel ref dot locations
 	int *pxcorns = malloc(4*2*sizeof(*pxcorns));
@@ -137,7 +148,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn)
 	TIFFGetField(image, TIFFTAG_IMAGELENGTH, &hei);
 	printf("Image dimensions: %d, %d\n", wid, hei);
 
-	imdata = (uint32 *) _TIFFmalloc(wid*hei*sizeof(uint32)); 
+	imdata = (uint32_t *) _TIFFmalloc(wid*hei*sizeof(uint32_t)); 
 	if (imdata == NULL) {
 		printf("Failed to allocate memory for horizontal image.\n");
 		exit(1);
@@ -652,7 +663,7 @@ void solveprofile(char *imfnh, char *imfnv, int *idots, char *outfn)
 }
 
 // Determines which part of pattern is reflected for each pixel.
-void calcpattvecs(const Pattern *pat, const uint32 *im, const int iw,
+void calcpattvecs(const Pattern *pat, const uint32_t *im, const int iw,
 		double *vecs, const int bw, const int *ipix, const int *yb,
 		const int *offs, const double idist, const int orien)
 {
@@ -1099,8 +1110,8 @@ void slopeerror(const double *vecs, const double *poss, const int bw,
 	*(sestats+3) = sigy;
 }
 
-void centroid(uint32 *im, uint32 w, uint32 h, int *idot, double *dot,
-		int dotpx)
+void centroid(const uint32_t *im, uint32_t w, uint32_t h, const int *idot,
+		double *dot, int dotpx)
 {
 
 	double *region; // Region of pixels about dot guess
@@ -1136,7 +1147,7 @@ void centroid(uint32 *im, uint32 w, uint32 h, int *idot, double *dot,
 	for (int rx=0; rx<regw; rx++) {
 		for (int ry=0; ry<regh; ry++) {
 			double greypix;
-			uint32 pix = *(im+(ry+lowy)*w+rx+lowx);
+			uint32_t pix = *(im+(ry+lowy)*w+rx+lowx);
 			greypix = TIFFGetR(pix) + TIFFGetG(pix) + TIFFGetB(pix);
 			greypix = 765.0 - greypix;
 			*(region+ry*regw+rx) = greypix;
@@ -1175,30 +1186,4 @@ void centroid(uint32 *im, uint32 w, uint32 h, int *idot, double *dot,
 
 	*(dot) = xmean + lowx;
 	*(dot+1) = ymean + lowy;
-}
-
-int main(int argc, char *argv[])
-{
-	printf("Reading in arguments...\n");
-
-	if (argc != 10) {
-		printf("Incorrect number of arguments.\n\n"
-				"profile.o himage vimage p1x p1y p2x p2y p3x p3y outfn\n\n");
-		exit(1);
-	}
-
-	int *idots = malloc(3*2*sizeof(*idots));
-
-	*(idots) = atoi(argv[3]);
-	*(idots+1) = atoi(argv[4]);
-	*(idots+2) = atoi(argv[5]);
-	*(idots+3) = atoi(argv[6]);
-	*(idots+4) = atoi(argv[7]);
-	*(idots+5) = atoi(argv[8]);
-
-	solveprofile(argv[1], argv[2], idots, argv[9]);
-	free(idots);
-	idots = NULL;
-
-	return 0;
 }

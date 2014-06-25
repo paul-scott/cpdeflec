@@ -18,13 +18,8 @@
 #ifndef INC_FITTING_H
 #define INC_FITTING_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <gsl/gsl_multimin.h>
+#include <stddef.h>
 #include <gsl/gsl_vector.h>
-
-#include "commath.h"
 
 typedef struct {
 	double *poss;

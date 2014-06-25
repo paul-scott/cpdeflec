@@ -18,12 +18,7 @@
 #ifndef INC_PATTERN_H
 #define INC_PATTERN_H
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <tiffio.h>
-#include <math.h>
-
-#include "commath.h"
+#include <stdint.h>
 
 // Get locating values from photogrammetry. Position is horizontal edge of
 // horiz rotated pattern, and vertical edge of vert rotated pattern.
@@ -39,7 +34,7 @@ typedef struct {
 
 void initpattern(Pattern *p, const char *relfn);
 void freepattern(Pattern *p);
-double getdist(const Pattern *p, const uint32 *pix, const double pdist,
+double getdist(const Pattern *p, const uint32_t *pix, const double pdist,
 		const int orien);
 void transpattvec(const Pattern *p, double *vec);
 

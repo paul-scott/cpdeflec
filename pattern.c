@@ -16,8 +16,14 @@
  */
 
 #include "pattern.h"
+#include "commath.h"
 
-double gethue(const uint32 *rgb);
+#include <stdlib.h>
+#include <stdio.h>
+#include <tiffio.h>
+#include <math.h>
+
+double gethue(const uint32_t *rgb);
 double hueshift(const Pattern *p, const double hue, const int orien);
 
 void initpattern(Pattern *p, const char *relfn)
@@ -62,7 +68,7 @@ void transpattvec(const Pattern *p, double *vec)
 	//printf("glo: %f, %f, %f\n", *vec, *(vec+1), *(vec+2));
 }
 
-double getdist(const Pattern *p, const uint32 *rgb, const double pdist,
+double getdist(const Pattern *p, const uint32_t *rgb, const double pdist,
 		const int orien)
 {
 	// Might like to think of not changing pdist if we get a grey pixel.
@@ -79,7 +85,7 @@ double getdist(const Pattern *p, const uint32 *rgb, const double pdist,
 	}
 }
 
-double gethue(const uint32 *rgb)
+double gethue(const uint32_t *rgb)
 {
 	double R = (double) TIFFGetR(*rgb)/255.0;
 	double G = (double) TIFFGetG(*rgb)/255.0;

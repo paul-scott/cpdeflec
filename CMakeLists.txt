@@ -8,6 +8,7 @@ set(CMAKE_C_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -std=c99 -O2")
 #link_directories()
 
 add_executable(cpdeflec
+	main.c
 	cpdeflec.c
 	commath.c
 	camera.c
