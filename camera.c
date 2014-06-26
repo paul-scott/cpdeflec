@@ -29,7 +29,7 @@ typedef struct {
 } Funcpars;
 
 void print_state(size_t iter, gsl_multiroot_fsolver *s);
-void finddirpixcam(const Camera *c, const double *pix, double *dir);
+void pixdircam(const Camera *c, const double *pix, double *dir);
 int func(const gsl_vector *p, void *params, gsl_vector *f);
 
 void initcamera(Camera *c)
@@ -75,7 +75,7 @@ void locatecam(Camera *c, const double *dots, const double *dotsep,
 
 	// Find directions from pixel values.
 	for (size_t i=0; i<3; i++)
-		finddirpixcam(c, (dots+i*2), (ph+i*3));
+		pixdircam(c, (dots+i*2), (ph+i*3));
 
 	params.dsep = dotsep;
 	params.ph = ph;
@@ -194,22 +194,46 @@ void locatecam(Camera *c, const double *dots, const double *dotsep,
 	dists = NULL;
 }
 
-/*
- * It seems like the radial distortions are being incorrectly applied.
- * It is likely, given the context where the distortion values came from,
- * that they are from going from the pixel frame of reference to the apparent
- * pixel frame of reference.  This would suggest that the signs should be
- * positive for the finddir functions.  For the findpix function an inverse of
- * this distortion would need to be take (just taking negatives is likely
- * wrong).  However findpix might not need to be accurate as it only seems
- * to be used for finding the pixels that bound the mirror corners.
- * Actually I take that back, by playing round with raderr we can see it has
- * a big impact on the solution.
- * Should go back to original document to investigate.
+/* 
+ * The undeformed radial position is the sensor plane position where we would
+ * expect a light vector incident on the centre of a perfect lens centre to end
+ * up.  The deformed radial position is where it ends up on an imperfect lens.
+ * The radial transformation takes an undeformed radial position to a deformed
+ * position according to:
+ *     r_d = r + k_3*r^3 + k_5*r^5
+ * An approximate inverse to this transformation is given by:
+ *     r = r_d - k_3*r_d^3 - k_5*r_d^5
+ * See thesis appendix B.2 for more details.
+ *
+ * For these functions Multiply the returned value in order to apply respective
+ * transformation.
  */
+double raderr_deform(const Camera *c, double x, double y)
+{
+	double radius = sqrt(x*x + y*y);
+	return 1.0 + c->rdisto[0]*pow(radius, 2.0) + c->rdisto[1]*pow(radius, 4.0);
+}
 
-// Finds pixel that intercepts position vector.
-void findpix(const Camera *c, const double *vec, int *pix)
+double raderr_undeform(const Camera *c, double xd, double yd)
+{
+	double radius = sqrt(xd*xd + yd*yd);
+	return 1.0 - c->rdisto[0]*pow(radius, 2.0) - c->rdisto[1]*pow(radius, 4.0);
+}
+
+// Sensor position to pixel
+double pos_to_pix(double soptc, double pxsize, double dim, double x)
+{
+	return (x + soptc)/pxsize + dim/2.0 - 0.5;
+}
+
+// Pixel to sensor position
+double pix_to_pos(double soptc, double pxsize, double dim, double px)
+{
+	return -(pxsize*(px - dim/2.0 + 0.5) - soptc);
+}
+
+// Finds pixel that intercepts point given by position vector.
+void pospix(const Camera *c, const double *vec, int *pix)
 {
 	double pos[3]; // Position from camera
 	double dir[3];
@@ -229,32 +253,27 @@ void findpix(const Camera *c, const double *vec, int *pix)
 	scale(-c->prdist/dir[2], dir);
 
 	// Applying radial distortion.
-	double radius = sqrt(dir[0]*dir[0] + dir[1]*dir[1]);
-	double raderr = 1.0 + c->rdisto[0]*pow(radius, 2.0) +
-			c->rdisto[1]*pow(radius, 4.0);
-
+	double raderr = raderr_deform(c, dir[0], dir[1]);
 	dir[0] *= raderr;
 	dir[1] *= raderr;
 
-	pix[0] = (int) ((dir[0] + c->soptc[0])/c->pxsize + c->dims[0]/2.0 - 0.5);
-	pix[1] = (int) ((dir[1] + c->soptc[1])/c->pxsize + c->dims[1]/2.0 - 0.5);
+	pix[0] = (int) pos_to_pix(c->soptc[0], c->pxsize, c->dims[0], dir[0]);
+	pix[1] = (int) pos_to_pix(c->soptc[1], c->pxsize, c->dims[1], dir[1]);
 }
 
-// Calculates global direction of pixel from camera.
-void finddirpix(const Camera *c, int x, int y, double *dir)
+/* Calculates global direction of pixel from camera.
+ * Similar to pixdircam except it works on integers and transforms
+ * the direction vector to global coords.
+ */
+void pixdir(const Camera *c, int x, int y, double *dir)
 {
-	// Similar to finddirpixcam except it works on integers and transforms
-	// the direction vector to global coords.
 	double temp[3];
-	temp[0] = -(c->pxsize*(x - c->dims[0]/2.0 + 0.5) - c->soptc[0]);
-	temp[1] = -(c->pxsize*(y - c->dims[1]/2.0 + 0.5) - c->soptc[1]);
+	temp[0] = pix_to_pos(c->soptc[0], c->pxsize, c->dims[0], x);
+	temp[1] = pix_to_pos(c->soptc[1], c->pxsize, c->dims[1], y);
 	temp[2] = c->prdist;
 
 	// Correcting for radial lens distortions.
-	double radius = sqrt(temp[0]*temp[0] + temp[1]*temp[1]);
-	double raderr = 1.0 - c->rdisto[0]*pow(radius, 2.0) -
-			c->rdisto[1]*pow(radius, 4.0);
-
+	double raderr = raderr_undeform(c, temp[0], temp[1]);
 	temp[0] *= raderr;
 	temp[1] *= raderr;
 
@@ -264,25 +283,23 @@ void finddirpix(const Camera *c, int x, int y, double *dir)
 	matxvec(c->trans, temp, dir);
 }
 
-// Calculates camera coord direction of pixel from camera. Note the use of
-// double to get sub-pixel accuracy for locating.
-void finddirpixcam(const Camera *c, const double *pix, double *dir)
+/* Calculates camera coord direction of pixel from camera. Note the use of
+ * double to get sub-pixel accuracy for locating.
+ *
+ * Define camera ax opposite to px and ay opposite to py. az is along
+ * optical axis, therefore (x,y,z)=(0,0,0) optical centre. As position
+ * of pixel in array increases, image pixel value increases.
+ * Signs used here to get the direction right. Reverse signs and we
+ * get position of pixel in the array from optical centre.
+ */
+void pixdircam(const Camera *c, const double *pix, double *dir)
 {
-	/* Define camera ax opposite to px and ay opposite to py. az is along
-	 * optical axis, therefore (x,y,z)=(0,0,0) optical centre. As position
-	 * of pixel in array increases, image pixel value increases.
-	 * Signs used here to get the direction right. Reverse signs and we
-	 * get position of pixel in the array from optical centre.
-	 */
-	dir[0] = -(c->pxsize*(pix[0] - c->dims[0]/2.0 + 0.5) - c->soptc[0]);
-	dir[1] = -(c->pxsize*(pix[1] - c->dims[1]/2.0 + 0.5) - c->soptc[1]);
+	dir[0] = pix_to_pos(c->soptc[0], c->pxsize, c->dims[0], pix[0]);
+	dir[1] = pix_to_pos(c->soptc[1], c->pxsize, c->dims[1], pix[1]);
 	dir[2] = c->prdist;
 
 	// Correcting for radial lens distortions.
-	double radius = sqrt(dir[0]*dir[0] + dir[1]*dir[1]);
-	double raderr = 1.0 - c->rdisto[0]*pow(radius, 2.0) -
-			c->rdisto[1]*pow(radius, 4.0);
-
+	double raderr = raderr_undeform(c, dir[0], dir[1]);
 	dir[0] *= raderr;
 	dir[1] *= raderr;
 

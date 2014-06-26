@@ -36,7 +36,7 @@ void freecamera(Camera *c);
 int objpixsize(const Camera *c, double objsize, double objdist);
 void locatecam(Camera *c, const double *dots, const double *dotsep,
 		double distguess);
-void findpix(const Camera *c, const double *vec, int *pix);
-void finddirpix(const Camera *c, int x, int y, double *dir);
+void pospix(const Camera *c, const double *vec, int *pix);
+void pixdir(const Camera *c, int x, int y, double *dir);
 
 #endif /* INC_CAMERA_H */

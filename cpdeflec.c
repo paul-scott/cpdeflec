@@ -180,12 +180,12 @@ void solveprofile(const char *imfnh, const char *imfnv, const int *idots,
 	printf("Bouding corners:\n");
 	// Finding pixels that correspond to mirror bounding corners. 
 	for (int i=0; i<4; i++) {
-		findpix(&camera, corns[i], (pxcorns+i*2));
+		pospix(&camera, corns[i], (pxcorns+i*2));
 		printf("%d, %d\n", *(pxcorns+i*2), *(pxcorns+i*2+1));
 	}
 
 	//double tempdirec[3];
-	//finddirpix(&camera, 2129, 2918, tempdirec);
+	//pixdir(&camera, 2129, 2918, tempdirec);
 	//printf("%f, %f, %f\n", tempdirec[0], tempdirec[1], tempdirec[2]);
 
 	free(dots);
@@ -780,7 +780,7 @@ void solvesurface(const Camera *cam, double *vecs, double *poss, const int bw,
 	double ch[3]; // Direction from camera to point
 	double ph[3]; // Direction from pattern to point
 	// Calculating direction from camera to point.
-	finddirpix(cam, *(ipix)+*(offs), *(ipix+1)+*(offs+1), ch);
+	pixdir(cam, *(ipix)+*(offs), *(ipix+1)+*(offs+1), ch);
 	// Estimating position of point.
 	*(poss+((*(ipix+1))*bw+*ipix)*3) = ch[0]*(idepth-cam->pos[2])/ch[2] +
 		cam->pos[0];
@@ -800,7 +800,7 @@ void solvesurface(const Camera *cam, double *vecs, double *poss, const int bw,
 	
 	// Working up starting column.
 	for (int y=*(ipix+1)-1; y>=*(yb+(*ipix)*2); y--) {
-		finddirpix(cam, *(ipix)+*(offs), y+*(offs+1), ch);
+		pixdir(cam, *(ipix)+*(offs), y+*(offs+1), ch);
 		double dist = extrapolate(cam, (poss+((y+1)*bw+*ipix)*3),
 				(vecs+((y+1)*bw+*ipix)*3), ch);
 		*(poss+(y*bw+*ipix)*3) = dist*ch[0]+ cam->pos[0];
@@ -818,7 +818,7 @@ void solvesurface(const Camera *cam, double *vecs, double *poss, const int bw,
 
 	// Working way down starting column.
 	for (int y=*(ipix+1)+1; y<=*(yb+(*ipix)*2+1); y++) {
-		finddirpix(cam, *(ipix)+*(offs), y+*(offs+1), ch);
+		pixdir(cam, *(ipix)+*(offs), y+*(offs+1), ch);
 		double dist = extrapolate(cam, (poss+((y-1)*bw+*ipix)*3),
 				(vecs+((y-1)*bw+*ipix)*3), ch);
 		*(poss+(y*bw+*ipix)*3) = dist*ch[0]+ cam->pos[0];
@@ -838,7 +838,7 @@ void solvesurface(const Camera *cam, double *vecs, double *poss, const int bw,
 	for (int x=*ipix-1; x>=0; x--) {
 		// Find a good starting point.
 		int iy = imin(*(yb+x*2+1),imax(*(ipix+1),*(yb+x*2)));
-		finddirpix(cam, x+*(offs), iy+*(offs+1), ch);
+		pixdir(cam, x+*(offs), iy+*(offs+1), ch);
 		double dist = extrapolate(cam, (poss+(iy*bw+x+1)*3),
 				(vecs+(iy*bw+x+1)*3), ch);
 		*(poss+(iy*bw+x)*3) = dist*ch[0]+ cam->pos[0];
@@ -856,7 +856,7 @@ void solvesurface(const Camera *cam, double *vecs, double *poss, const int bw,
 		// Working up.
 		for (int y=iy-1; y>=*(yb+x*2); y--) {
 			int count = 1;
-			finddirpix(cam, x+*(offs), y+*(offs+1), ch);
+			pixdir(cam, x+*(offs), y+*(offs+1), ch);
 			dist = extrapolate(cam, (poss+((y+1)*bw+x)*3),
 					(vecs+((y+1)*bw+x)*3), ch);
 			if (*(poss+((y+1)*bw+x+1)*3) != -1.0) {
@@ -886,7 +886,7 @@ void solvesurface(const Camera *cam, double *vecs, double *poss, const int bw,
 		// Working down.
 		for (int y=iy+1; y<=*(yb+x*2+1); y++) {
 			int count = 1;
-			finddirpix(cam, x+*(offs), y+*(offs+1), ch);
+			pixdir(cam, x+*(offs), y+*(offs+1), ch);
 			dist = extrapolate(cam, (poss+((y-1)*bw+x)*3),
 					(vecs+((y-1)*bw+x)*3), ch);
 			if (*(poss+((y-1)*bw+x+1)*3) != -1.0) {
@@ -918,7 +918,7 @@ void solvesurface(const Camera *cam, double *vecs, double *poss, const int bw,
 	for (int x=*ipix+1; x<bw; x++) {
 		// Find a good starting point.
 		int iy = imin(*(yb+x*2+1),imax(*(ipix+1),*(yb+x*2)));
-		finddirpix(cam, x+*(offs), iy+*(offs+1), ch);
+		pixdir(cam, x+*(offs), iy+*(offs+1), ch);
 		double dist = extrapolate(cam, (poss+(iy*bw+x-1)*3),
 				(vecs+(iy*bw+x-1)*3), ch);
 		*(poss+(iy*bw+x)*3) = dist*ch[0]+ cam->pos[0];
@@ -936,7 +936,7 @@ void solvesurface(const Camera *cam, double *vecs, double *poss, const int bw,
 		// Working up.
 		for (int y=iy-1; y>=*(yb+x*2); y--) {
 			int count = 1;
-			finddirpix(cam, x+*(offs), y+*(offs+1), ch);
+			pixdir(cam, x+*(offs), y+*(offs+1), ch);
 			dist = extrapolate(cam, (poss+((y+1)*bw+x)*3),
 					(vecs+((y+1)*bw+x)*3), ch);
 			if (*(poss+((y+1)*bw+x-1)*3) != -1.0) {
@@ -965,7 +965,7 @@ void solvesurface(const Camera *cam, double *vecs, double *poss, const int bw,
 		// Working down.
 		for (int y=iy+1; y<=*(yb+x*2+1); y++) {
 			int count = 1;
-			finddirpix(cam, x+*(offs), y+*(offs+1), ch);
+			pixdir(cam, x+*(offs), y+*(offs+1), ch);
 			dist = extrapolate(cam, (poss+((y-1)*bw+x)*3),
 					(vecs+((y-1)*bw+x)*3), ch);
 			if (*(poss+((y-1)*bw+x-1)*3) != -1.0) {
