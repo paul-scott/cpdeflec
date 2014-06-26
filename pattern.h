@@ -30,12 +30,12 @@ typedef struct {
 	double yoff;
 	double trans[3][3]; // Transform
 	double segsize; // Width of repeating pattern segment
+	char *relfn; // Filename for pattern hue relation
 } Pattern;
 
-void initpattern(Pattern *p, const char *relfn);
+void initpattern(Pattern *p);
 void freepattern(Pattern *p);
-double getdist(const Pattern *p, const uint32_t *pix, const double pdist,
-		const int orien);
+double getdist(const Pattern *p, const uint32_t *pix, double pdist, int orien);
 void transpattvec(const Pattern *p, double *vec);
 
 #endif /* INC_PATTERN_H */

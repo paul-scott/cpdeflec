@@ -18,7 +18,21 @@
 #ifndef INC_CPDEFLEC_H
 #define INC_CPDEFLEC_H
 
-void solveprofile(const char *imfnh, const char *imfnv, const int *idots,
+#include "commath.h"
+#include "camera.h"
+#include "pattern.h"
+#include "fitting.h"
+
+typedef struct {
+	double dotsize; // Physical size of reference dots in mm
+	double dotsep[3]; // Distance between TL-BL, BL-TR, TR-TL
+	double corns[4][3]; // Mirror boundary corners TL, BL, BR, TR
+	double distguess; // Guess of distance from camera to mirror
+	double startdepth; // Height of starting point
+} Mirror;
+
+void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
+		const char *imfnh, const char *imfnv, const int *idots,
 		const char *outfn);
 
 #endif /* INC_CPDEFLEC_H */

@@ -15,6 +15,8 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "cpdeflec.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stddef.h>
@@ -23,59 +25,6 @@
 #include <string.h>
 #include <tiffio.h>
 
-#include "commath.h"
-#include "camera.h"
-#include "pattern.h"
-#include "fitting.h"
-
-/* Mirror parameters
- * *****************
- */
-static const double dotsize = 7.0; // Physiscal size of reference of dots in mm
-static const double dotsep[3] = {1192.8986,1745.6891,1271.5304}; // Distance
-// between TL-BL, BL-TR, TR-TL
-static const double corns[4][3] = {{61.010941,17.819132,-24.028367},
-	{81.010941,1167.8191,-24.028367},
-	{1211.0109,1167.8191,-24.028367},
-	{1211.0109,17.819132,-24.028367}}; // Mirror boundary corners:
-// TL, BL, BR, TR
-
-/* Camera parameters
- * *****************
- * Get the principal values from photogrammetry calibration of camera.
- */
-//static const int camdims[2] = {4288,2848}; // Width and height of CCD array in pixels
-//static const double pxsize = 0.00554; // Size of a pixel in mm
-//static const double prdist = 20.53; // Pricipal distance of camera lens in mm
-//static const double soptc[2] = {0.1065,0.2374}; // Sensor optical centre in mm
-//// Take negative of vms y component.
-//static const double rdisto[2] = {-2.6652e-4, 5.3876e-7}; // k3, k5
-
-///* Pattern parameters
-// * ******************
-// * Get locating values from photogrammetry. Position is horizontal edge of
-// * horiz rotated pattern, and vertical edge of vert rotated pattern.
-// */
-//// NOTE NEED TO FIND BETTER VALUE.
-//static const double patpos[3] = {635.77408,-364.31168,-2334.4864}; // Pos of
-//static const double patxoff = 4.6407583;
-//static const double patyoff = 3.2714379;
-//// pattern corner
-//// NOTE MIGHT WANT TO WORK ON NON ORTHOGONAL VECTORS.
-//static const double pattrans[3][3] = {{0.8542358,0.0018653,-0.5198823},
-//	{0.0015481,0.99998,0.0061316},
-//	{0.5198834,-0.0060427,0.8542159}}; // Coordinate system translation
-//const double segsize = 47.7; // Width of repeating pattern segment
-//static const int relbins = 274;
-
-static const double camdistguess = 3000.0; // Guess of distance from mirror to camera
-static const double startdepth = -24.028367; // Height of starting point.
-static const char *relfn = "data/huerel.csv";
-
-/* LOCAL FUNCTIONS
- * ***************
- * Declared here instead of header.
- */
 void centroid(const uint32_t *im, uint32_t w, uint32_t h, const int *idot,
 		double *dot, int dotpx);
 void calcpattvecs(const Pattern *pat, const uint32_t *im, const int iw,
@@ -91,51 +40,22 @@ void slopeerror(const double *vecs, const double *poss, const int bw,
 		const int *yb, const int shape, const double *params, double *serr,
 		double *sestats);
 
-void solveprofile(const char *imfnh, const char *imfnv, const int *idots,
+void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
+		const char *imfnh, const char *imfnv, const int *idots,
 		const char *outfn)
 {
 	TIFF *image; // TIFF file pointer
 	uint32_t wid, hei; // Image width and height
 	uint32_t *imdata; // Pixel data loaded from TIFF image, y major
 	int dotpx; // Approximate width of ref dot in pixels
-	double *dots = malloc(3*2*sizeof(*dots)); // Sub-pixel ref dot locations
-	int *pxcorns = malloc(4*2*sizeof(*pxcorns));
+	double dots[3*2]; // Sub-pixel ref dot locations
+	int pxcorns[4*2];
 
-	Camera camera;
-	Pattern pattern;
 
 	//printf("%d, %d\n%d, %d\n%d, %d\n", *(idots), *(idots+1), *(idots+2),
 	//	*(idots+3), *(idots+4), *(idots+5));
-
-	// Setup camera parameters
-	camera.dims[0] = 4288;
-	camera.dims[1] = 2848;
-	camera.pxsize = 0.00554;
-	camera.prdist = 20.53;
-	camera.soptc[0] = 0.1065;
-	camera.soptc[1] = 0.2374;
-	camera.rdisto[0] = -2.6652e-4;
-	camera.rdisto[1] = 5.3876e-7;
 	initcamera(&camera);
-
-	// Setup pattern parameters
-	pattern.relbins = 274;
-	pattern.pos[0] = 635.77408;
-	pattern.pos[1] = -364.31168;
-	pattern.pos[2] = -2334.4864;
-	pattern.xoff = 4.6407583;
-	pattern.yoff = 3.2714379;
-	pattern.trans[0][0] = 0.8542358;
-	pattern.trans[0][1] = 0.0018653;
-	pattern.trans[0][2] = -0.5198823;
-	pattern.trans[1][0] = 0.0015481;
-	pattern.trans[1][1] = 0.99998;
-	pattern.trans[1][2] = 0.0061316;
-	pattern.trans[2][0] = 0.5198834;
-	pattern.trans[2][1] = -0.0060427;
-	pattern.trans[2][2] = 0.8542159;
-	pattern.segsize = 47.7;
-	initpattern(&pattern, relfn);
+	initpattern(&pattern);
 
 	image = TIFFOpen(imfnh, "r");
 	if (image == NULL) {
@@ -164,7 +84,7 @@ void solveprofile(const char *imfnh, const char *imfnv, const int *idots,
 	image = NULL;
 
 	// Find centre of dots.
-	dotpx = objpixsize(&camera, dotsize, camdistguess);
+	dotpx = objpixsize(&camera, mirror.dotsize, mirror.distguess);
 	for (int i=0; i<3; i++) {
 		centroid(imdata, wid, hei, (idots+i*2), (dots+i*2), dotpx);
 	}
@@ -174,22 +94,19 @@ void solveprofile(const char *imfnh, const char *imfnv, const int *idots,
 		*(dots+3), *(dots+4), *(dots+5));
 
 	// Locating position of camera.
-	locatecam(&camera, dots, dotsep, camdistguess);
+	locatecam(&camera, dots, mirror.dotsep, mirror.distguess);
 	printf("Camera successfully located.\n");
 
 	printf("Bouding corners:\n");
 	// Finding pixels that correspond to mirror bounding corners. 
 	for (int i=0; i<4; i++) {
-		pospix(&camera, corns[i], (pxcorns+i*2));
+		pospix(&camera, mirror.corns[i], (pxcorns+i*2));
 		printf("%d, %d\n", *(pxcorns+i*2), *(pxcorns+i*2+1));
 	}
 
 	//double tempdirec[3];
 	//pixdir(&camera, 2129, 2918, tempdirec);
 	//printf("%f, %f, %f\n", tempdirec[0], tempdirec[1], tempdirec[2]);
-
-	free(dots);
-	dots = NULL;
 
 	// Determining max and min bounds.
 	int xpixmax = imax(*(pxcorns),imax(*(pxcorns+2),
@@ -405,7 +322,8 @@ void solveprofile(const char *imfnh, const char *imfnv, const int *idots,
 	printf("Initial pixel: %d, %d\n", initpixi[0], initpixi[1]);
 	*/
 
-	solvesurface(&camera, vecs, poss, xlen, pxcorns, ybound, offset, startdepth);
+	solvesurface(&camera, vecs, poss, xlen, pxcorns, ybound, offset,
+			mirror.startdepth);
 	printf("Surface solved.\n");
 
 	// Centring data points about axis.
@@ -648,8 +566,6 @@ void solveprofile(const char *imfnh, const char *imfnv, const int *idots,
 	free(poslfn);
 	poslfn = NULL;
 	
-	free(pxcorns);
-	pxcorns = NULL;
 	free(ybound);
 	ybound = NULL;
 

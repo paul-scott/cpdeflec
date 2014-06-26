@@ -36,12 +36,12 @@ double sphesqerr(const gsl_vector *vars, void *params)
 	for (int x=0; x<xlen; x=x+xlen/50) {
 		for (int y=*(yb+x*2); y<=*(yb+x*2+1); y=y+xlen/50) {
 			// Wait need to add shift to vec...
-			tvec[0] = (*(poss+(y*xlen+x)*3) + gsl_vector_get(vars, 0));
-			tvec[1] = (*(poss+(y*xlen+x)*3+1) + gsl_vector_get(vars, 1));
-			tvec[2] = (*(poss+(y*xlen+x)*3+2) +	gsl_vector_get(vars, 2));
+			tvec[0] = poss[(y*xlen+x)*3+0] + gsl_vector_get(vars, 0);
+			tvec[1] = poss[(y*xlen+x)*3+1] + gsl_vector_get(vars, 1);
+			tvec[2] = poss[(y*xlen+x)*3+2] + gsl_vector_get(vars, 2);
 
 			err = err + pow((tvec[2] + gsl_vector_get(vars, 3) -
-					sphere(tvec[0], tvec[1], gsl_vector_get(vars, 3))),2.0);
+					sphere(tvec[0], tvec[1], gsl_vector_get(vars, 3))), 2.0);
 		}
 	}
 	return err;
@@ -65,54 +65,51 @@ double parabsqerr(const gsl_vector *vars, void *params)
 	for (int x=0; x<xlen; x=x+xlen/50) {
 		for (int y=*(yb+x*2); y<=*(yb+x*2+1); y=y+xlen/50) {
 			// Wait need to add shift to vec...
-			tvec1[0] = (*(poss+(y*xlen+x)*3) + gsl_vector_get(vars, 0));
-			tvec1[1] = (*(poss+(y*xlen+x)*3+1) + gsl_vector_get(vars, 1));
-			tvec1[2] = (*(poss+(y*xlen+x)*3+2) + gsl_vector_get(vars, 2));
+			tvec1[0] = poss[(y*xlen+x)*3+0] + gsl_vector_get(vars, 0);
+			tvec1[1] = poss[(y*xlen+x)*3+1] + gsl_vector_get(vars, 1);
+			tvec1[2] = poss[(y*xlen+x)*3+2] + gsl_vector_get(vars, 2);
 			// Apply rotations.
 			matxvec(rotm, tvec1, tvec2);
 			// + sign since paraboloid needs to be upside down.
 			err = err + pow((tvec2[2] + paraboloid(tvec2[0], tvec2[1],
-					gsl_vector_get(vars, 6), gsl_vector_get(vars, 7))),2.0);
+					gsl_vector_get(vars, 6), gsl_vector_get(vars, 7))), 2.0);
 		}
 	}
 	return err;
 }
 
 
-double paraboloid(const double x, const double y, const double f1,
-		const double f2)
+double paraboloid(double x, double y, double f1, double f2)
 {
 	return x*x/(4.0*f1) + y*y/(4.0*f2);
 }
 
-double sphere(const double x, const double y, const double rad)
+double sphere(double x, double y, double rad)
 {
 	// Need to make sure that region dosen't drift outside radius of circle.
 	return sqrt(rad*rad - x*x -	y*y);
 }
 
-void sphereslope(const double x, const double y, const double rad, double *nrm)
+void sphereslope(double x, double y, double rad, double *nrm)
 {
 	// Normal is equal to sphere centre minus sphere surface location.
-	*nrm = -x;
-	*(nrm+1) = -y;
-	*(nrm+2) = -sqrt(rad*rad - x*x - y*y);
+	nrm[0] = -x;
+	nrm[1] = -y;
+	nrm[2] = -sqrt(rad*rad - x*x - y*y);
 	scale(1.0/norm(nrm), nrm);
 }
 
-void parabslope(const double x, const double y, const double f1, const double f2,
-		double *nrm)
+void parabslope(double x, double y, double f1, double f2, double *nrm)
 {
 	// Upside down parabaloid, hence the signs.
-	*nrm = -x/(2.0*f1);
-	*(nrm+1) = -y/(2.0*f2);
-	*(nrm+2) = -1.0;
+	nrm[0] = -x/(2.0*f1);
+	nrm[1] = -y/(2.0*f2);
+	nrm[2] = -1.0;
 	scale(1.0/norm(nrm), nrm);
 }
 
-
 void minerror(double (*f)(const gsl_vector *va, void *params),
-		const Errparams *pars, const size_t n, gsl_vector *vars,
+		const Errparams *pars, size_t n, gsl_vector *vars,
 		const gsl_vector *stepsize)
 {
 	gsl_multimin_fminimizer *minzer;
@@ -149,17 +146,15 @@ void minerror(double (*f)(const gsl_vector *va, void *params),
 		status = gsl_multimin_test_size(size, 1e-2);
 
 		//printf("%5d: ", iter);
-		for (int i=0; i<n; i++) {
-			//printf("%10.3e ", gsl_vector_get(minzer->x, i));
-		}
+		//for (int i=0; i<n; i++)
+		//	printf("%10.3e ", gsl_vector_get(minzer->x, i));
 		iter++;
 	} while (status == GSL_CONTINUE && iter < 2000);
 
 	printf("f() = %7.3f size = %.3f\n", minzer->fval, size);
 
-	for (int i=0; i<n; i++) {
+	for (int i=0; i<n; i++)
 		gsl_vector_set(vars, i, gsl_vector_get(minzer->x, i));
-	}
 
 	gsl_multimin_fminimizer_free(minzer);
 	minzer = NULL;
