@@ -39,6 +39,7 @@ void surfnorm(const double *vin, const double *vre, double *snrm);
 void slopeerror(const double *vecs, const double *poss, const int bw,
 		const int *yb, const int shape, const double *params, double *serr,
 		double *sestats);
+void pnts_line(const int *p1, const int *p2, Polynom *pol, double *coeffs);
 
 void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 		const char *imfnh, const char *imfnv, const int *idots,
@@ -51,9 +52,6 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 	double dots[3*2]; // Sub-pixel ref dot locations
 	int pxcorns[4*2];
 
-
-	//printf("%d, %d\n%d, %d\n%d, %d\n", *(idots), *(idots+1), *(idots+2),
-	//	*(idots+3), *(idots+4), *(idots+5));
 	initcamera(&camera);
 	initpattern(&pattern);
 
@@ -90,18 +88,18 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 	}
 
 	printf("Centroided dots:\n");
-	printf("%f, %f\n%f, %f\n%f, %f\n", *(dots), *(dots+1), *(dots+2),
-		*(dots+3), *(dots+4), *(dots+5));
+	printf("%f, %f\n%f, %f\n%f, %f\n", dots[0], dots[1], dots[2], dots[3],
+			dots[4], dots[5]);
 
 	// Locating position of camera.
 	locatecam(&camera, dots, mirror.dotsep, mirror.distguess);
 	printf("Camera successfully located.\n");
 
-	printf("Bouding corners:\n");
+	printf("Bounding corners:\n");
 	// Finding pixels that correspond to mirror bounding corners. 
 	for (int i=0; i<4; i++) {
 		pospix(&camera, mirror.corns[i], (pxcorns+i*2));
-		printf("%d, %d\n", *(pxcorns+i*2), *(pxcorns+i*2+1));
+		printf("%d, %d\n", pxcorns[i*2], pxcorns[i*2+1]);
 	}
 
 	//double tempdirec[3];
@@ -109,14 +107,14 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 	//printf("%f, %f, %f\n", tempdirec[0], tempdirec[1], tempdirec[2]);
 
 	// Determining max and min bounds.
-	int xpixmax = imax(*(pxcorns),imax(*(pxcorns+2),
-					imax(*(pxcorns+4),*(pxcorns+6))));
-	int ypixmax = imax(*(pxcorns+1),imax(*(pxcorns+3),
-					imax(*(pxcorns+5),*(pxcorns+7))));
-	int xpixmin = imin(*(pxcorns),imin(*(pxcorns+2),
-					imin(*(pxcorns+4),*(pxcorns+6))));
-	int ypixmin = imin(*(pxcorns+1),imin(*(pxcorns+3),
-					imin(*(pxcorns+5),*(pxcorns+7))));
+	int xpixmax = imax(pxcorns[0], imax(pxcorns[2],
+					imax(pxcorns[4], pxcorns[6])));
+	int ypixmax = imax(pxcorns[1], imax(pxcorns[3],
+					imax(pxcorns[5], pxcorns[7])));
+	int xpixmin = imin(pxcorns[0], imin(pxcorns[2],
+					imin(pxcorns[4], pxcorns[6])));
+	int ypixmin = imin(pxcorns[1], imin(pxcorns[3],
+					imin(pxcorns[5], pxcorns[7])));
 
 	int xlen = xpixmax - xpixmin + 1;
 	int ylen = ypixmax - ypixmin + 1;
@@ -125,131 +123,72 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 	// Subtracting offset from pxcorns.
 	// Need to use offset for indices of camera and imdata.
 	for (int i=0; i<4; i++) {
-		*(pxcorns+i*2) = *(pxcorns+i*2) - *(offset);
-		*(pxcorns+i*2+1) = *(pxcorns+i*2+1) - *(offset+1);
+		pxcorns[i*2+0] = pxcorns[i*2+0] - offset[0];
+		pxcorns[i*2+1] = pxcorns[i*2+1] - offset[1];
 	}
 
 	printf("Size of area: %d, %d\n", xlen, ylen);
 	printf("Offset: %d, %d\n", offset[0], offset[1]);
 	printf("Starting pixel value: %d, %d, %d\n",
-			TIFFGetR(*(imdata+(*(offset+1))*wid+*offset)),
-			TIFFGetG(*(imdata+(*(offset+1))*wid+*offset)),
-			TIFFGetB(*(imdata+(*(offset+1))*wid+*offset)));
+			TIFFGetR(imdata[offset[1]*wid+offset[0]]),
+			TIFFGetG(imdata[offset[1]*wid+offset[0]]),
+			TIFFGetB(imdata[offset[1]*wid+offset[0]]));
 
-	double *tcoeffs = malloc(2*sizeof(*tcoeffs));
-	double *bcoeffs = malloc(2*sizeof(*bcoeffs));
-	double *lcoeffs = malloc(2*sizeof(*lcoeffs));
-	double *rcoeffs = malloc(2*sizeof(*rcoeffs));
+	double tcoeffs[2];
+	double bcoeffs[2];
+	double lcoeffs[2];
+	double rcoeffs[2];
 	Polynom tline = {1, tcoeffs};
 	Polynom bline = {1, bcoeffs};
 	Polynom lline = {1, lcoeffs};
 	Polynom rline = {1, rcoeffs};
-	int *ybound = malloc(2*xlen*sizeof(*ybound));
+	int ybound[2*xlen];
 
-	// Finding slope and offset for top bounding line.
-	// First checking to make sure that we don't get infinite slope.
-	// If so then polynomial set to constant zero (it shouldn't get called).
-	if (*(pxcorns) == *(pxcorns+3*2)) {
-		tline.degree = 0;
-		*tcoeffs = 0.0;
-	} else {
-		*(tcoeffs+1) = ((double) (*(pxcorns+3*2+1) - *(pxcorns+1)))/
-							(*(pxcorns+3*2) - *(pxcorns));
-		*(tcoeffs) = (double) (*(pxcorns+1) -
-							(*(tcoeffs+1))*(*(pxcorns)));
-		//printf("coeffs: %f, %f\n", *(tline.coeffs), *(tline.coeffs+1));
-	}
-
-	// Finding slope and offset for bottom bounding line.
-	// First checking to make sure that we don't get infinite slope.
-	// If so then polynomial set to constant zero (it shouldn't get called).
-	if (*(pxcorns+2*2) == *(pxcorns+1*2)) {
-		bline.degree = 0;
-		*bcoeffs = 0.0;
-	} else {
-		*(bcoeffs+1) = ((double) (*(pxcorns+2*2+1) - *(pxcorns+1*2+1)))/
-							(*(pxcorns+2*2) - *(pxcorns+1*2));
-		*(bcoeffs) = (double) (*(pxcorns+1*2+1) -
-							(*(bcoeffs+1))*(*(pxcorns+1*2)));
-		//printf("coeffs: %f, %f\n", *(bline.coeffs), *(bline.coeffs+1));
-	}
-
-	// Finding slope and offset for left bounding line.
-	// First checking to make sure that we don't get infinite slope.
-	// If so then polynomial set to constant zero (it shouldn't get called).
-	if (*(pxcorns) == *(pxcorns+1*2)) {
-		lline.degree = 0;
-		*lcoeffs = 0.0;
-	} else {
-		*(lcoeffs+1) = ((double) (*(pxcorns+1*2+1) - *(pxcorns+1)))/
-							(*(pxcorns+1*2) - *(pxcorns));
-		*(lcoeffs) = (double) (*(pxcorns+1) -
-							(*(lcoeffs+1))*(*(pxcorns)));
-		//printf("coeffs: %f, %f\n", *(lline.coeffs), *(lline.coeffs+1));
-	}
-
-	// Finding slope and offset for right bounding line.
-	// First checking to make sure that we don't get infinite slope.
-	// If so then polynomial set to constant zero (it shouldn't get called).
-	if (*(pxcorns+2*2) == *(pxcorns+3*2)) {
-		rline.degree = 0;
-		*rcoeffs = 0.0;
-	} else {
-		*(rcoeffs+1) = ((double) (*(pxcorns+3*2+1) - *(pxcorns+2*2+1)))/
-							(*(pxcorns+3*2) - *(pxcorns+2*2));
-		*(rcoeffs) = (double) (*(pxcorns+2*2+1) -
-							(*(rcoeffs+1))*(*(pxcorns+2*2)));
-		//printf("coeffs: %f, %f\n", *(rline.coeffs), *(rline.coeffs+1));
-	}
+	// Finding polynomial to represent the 4 bounding lines
+	pnts_line(pxcorns+3*2, pxcorns+0*2, &tline, tcoeffs);
+	pnts_line(pxcorns+2*2, pxcorns+1*2, &bline, bcoeffs);
+	pnts_line(pxcorns+1*2, pxcorns+0*2, &lline, lcoeffs);
+	pnts_line(pxcorns+3*2, pxcorns+2*2, &rline, rcoeffs);
 
 	// Calculating bounds.
-	if (*(pxcorns) == *(pxcorns+1*2)) {
-		*(ybound) = *(pxcorns+1);
-		*(ybound+1) = *(pxcorns+1*2+1);
+	if (pxcorns[0] == pxcorns[1*2]) {
+		ybound[0] = pxcorns[1];
+		ybound[1] = pxcorns[1*2+1];
 	} else {
 		// At most one of the two loops will execute.
-		for (int x=*(pxcorns); x<=(*(pxcorns+1*2)); x++) {
-			*(ybound+x*2) = (int) round(polyget(&tline,(double) x));
-			*(ybound+x*2+1) = (int) round(polyget(&lline,(double) x));
+		for (int x=pxcorns[0]; x<=pxcorns[1*2]; x++) {
+			ybound[x*2+0] = (int) round(polyget(&tline, (double) x));
+			ybound[x*2+1] = (int) round(polyget(&lline, (double) x));
 		}
-		for (int x=*(pxcorns+1*2); x<=(*(pxcorns)); x++) {
-			*(ybound+x*2) = (int) round(polyget(&lline,(double) x));
-			*(ybound+x*2+1) = (int) round(polyget(&bline,(double) x));
+		for (int x=pxcorns[1*2]; x<=pxcorns[0]; x++) {
+			ybound[x*2+0] = (int) round(polyget(&lline, (double) x));
+			ybound[x*2+1] = (int) round(polyget(&bline, (double) x));
 		}
 	}
 
-	if (*(pxcorns+2*2) == *(pxcorns+3*2)) {
-		*(ybound+(xlen-1)*2) = *(pxcorns+3*2+1);
-		*(ybound+(xlen-1)*2+1) = *(pxcorns+2*2+1);
+	if (pxcorns[2*2] == pxcorns[3*2]) {
+		ybound[(xlen-1)*2+0] = pxcorns[3*2+1];
+		ybound[(xlen-1)*2+1] = pxcorns[2*2+1];
 	} else {
 		// At most one of the two loops will execute.
-		for (int x=*(pxcorns+3*2); x<=(*(pxcorns+2*2)); x++) {
-			*(ybound+x*2) = (int) round(polyget(&rline,(double) x));
-			*(ybound+x*2+1) = (int) round(polyget(&bline,(double) x));
+		for (int x=pxcorns[3*2]; x<=pxcorns[2*2]; x++) {
+			ybound[x*2+0] = (int) round(polyget(&rline, (double) x));
+			ybound[x*2+1] = (int) round(polyget(&bline, (double) x));
 		}
 		for (int x=*(pxcorns+2*2); x<=(*(pxcorns+3*2)); x++) {
-			*(ybound+x*2) = (int) round(polyget(&tline,(double) x));
-			*(ybound+x*2+1) = (int) round(polyget(&rline,(double) x));
+			ybound[x*2+0] = (int) round(polyget(&tline, (double) x));
+			ybound[x*2+1] = (int) round(polyget(&rline, (double) x));
 		}
 	}
 
-	int startmid = imax(*(pxcorns),*(pxcorns+1*2));
-	int endmid = imin(*(pxcorns+2*2),*(pxcorns+3*2));
+	int startmid = imax(pxcorns[0], pxcorns[1*2]);
+	int endmid = imin(pxcorns[2*2], pxcorns[3*2]);
 	for (int x=startmid+1; x<endmid; x++) {
-		*(ybound+x*2) = (int) round(polyget(&tline,(double) x));
-		*(ybound+x*2+1) = (int) round(polyget(&bline,(double) x));
+		ybound[x*2+0] = (int) round(polyget(&tline, (double) x));
+		ybound[x*2+1] = (int) round(polyget(&bline, (double) x));
 	}
 
 	printf("ybound at 0: %d, %d\n", *ybound, *(ybound+1));
-
-	free(tcoeffs);
-	tcoeffs = NULL;
-	free(bcoeffs);
-	bcoeffs = NULL;
-	free(lcoeffs);
-	lcoeffs = NULL;
-	free(rcoeffs);
-	rcoeffs = NULL;
 
 	// Set up array of vectors to hold pattern positions. Later on it holds
 	// normal vectors.
@@ -566,9 +505,6 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 	free(poslfn);
 	poslfn = NULL;
 	
-	free(ybound);
-	ybound = NULL;
-
 	free(vecs);
 	vecs = NULL;
 	free(poss);
@@ -1102,4 +1038,18 @@ void centroid(const uint32_t *im, uint32_t w, uint32_t h, const int *idot,
 
 	*(dot) = xmean + lowx;
 	*(dot+1) = ymean + lowy;
+}
+
+// Find line that intercepts two points
+void pnts_line(const int *p1, const int *p2, Polynom *pol, double *coeffs)
+{
+	// First checking to make sure that we don't get infinite slope.
+	// If so then polynomial set to constant zero (it shouldn't get called).
+	if (p1[0] == p2[0]) {
+		pol->degree = 0;
+		coeffs[0] = 0.0;
+	} else {
+		coeffs[1] = ((double) (p1[1] - p2[1]))/(p1[0] - p2[0]);
+		coeffs[0] = (double) (p2[1] - coeffs[1]*p2[0]);
+	}
 }
