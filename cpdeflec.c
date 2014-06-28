@@ -213,13 +213,13 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 	TIFFClose(image);
 	image = NULL;
 
-	// Find best fitting curves
-	// ************************
-
 	// Piece together pattern vector components and transform into global
 	// coordinates.
 	transformpatt(&pattern, vecs, xlen, ybound);
 	printf("Pattern vectors translated to global coords.\n");
+
+	// Solve for mirror
+	// ****************
 
 	// Set up array of vectors to hold mirror surface positions.
 	double *poss = malloc(xlen*ylen*3*sizeof(*poss));
@@ -227,6 +227,7 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 		printf("Cannot allocate memory for poss, exiting...\n");
 		exit(1);
 	}
+
 	// Initialising array to -1 which is used as a check in solvesurface.
 	for (int i=0; i<(xlen*ylen*3); i++)
 		poss[i] = -1.0;
@@ -268,6 +269,9 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 			poss[(py*xlen+px)*3+2] = poss[(py*xlen+px)*3+2] - zmax;
 		}
 	}
+
+	// Find best fitting curves
+	// ************************
 
 	// Finding best fitting sphere.
 	Errparams fitpars = {poss, xlen, ybound, NULL};
@@ -487,33 +491,33 @@ void calcpattvecs(const Pattern *pat, const uint32_t *im, const int iw,
 	// Orientation 1 is horizontal, 0 is vertical.
 
 	// Working out first point.
-	*(vecs+((*(ipix+1))*bw+*ipix)*3+orien) = getdist(pat, (im+(*(ipix+1)+
-									*(offs+1))*iw+*(ipix)+*offs), idist, orien);
+	vecs[(ipix[1]*bw+ipix[0])*3+orien] = getdist(pat,
+			im+(ipix[1]+offs[1])*iw+ipix[0]+offs[0], idist, orien);
 	// Run down first column, shouldn't need to go up since at corner.
-	for (int y=*(ipix+1)+1; y<=*(yb+(*ipix)*2+1); y++) {
+	for (int y=ipix[1]+1; y<=yb[ipix[0]*2+1]; y++) {
 		// Using previously calculated distance.
-		double pdist = *(vecs+((y-1)*bw+*ipix)*3+orien);
-		*(vecs+(y*bw+*ipix)*3+orien) = getdist(pat, (im+(y+*(offs+1))*iw+*(ipix)+
-									*offs), pdist, orien);
+		double pdist = vecs[((y-1)*bw+ipix[0])*3+orien];
+		vecs[(y*bw+ipix[0])*3+orien] = getdist(pat,
+				im+(y+offs[1])*iw+ipix[0]+ offs[0], pdist, orien);
 	}
 
 	// Work our way left.
-	for (int x=*ipix-1; x>=0; x--) {
+	for (int x=ipix[0]-1; x>=0; x--) {
 		// Find a good starting point.
-		int iy = imin(*(yb+x*2+1),imax(*(ipix+1),*(yb+x*2)));
+		int iy = imin(yb[x*2+1], imax(ipix[1], yb[x*2]));
 		// Determining distance for starting point.
-		double pdist = *(vecs+(iy*bw+x+1)*3+orien);
-		*(vecs+(iy*bw+x)*3+orien) = getdist(pat, (im+(iy+*(offs+1))*iw+x+*offs),
-										pdist, orien);
+		double pdist = vecs[(iy*bw+x+1)*3+orien];
+		vecs[(iy*bw+x)*3+orien] = getdist(pat,
+				im+(iy+offs[1])*iw+x+offs[0], pdist, orien);
 		// Shouldn't need to move up.
 
 		// Working down.
-		for (int y=iy+1; y<=*(yb+x*2+1); y++) {
+		for (int y=iy+1; y<=yb[x*2+1]; y++) {
 			int count = 1;
 			// Averaging from up to 3 surrounding distances.
-			pdist = *(vecs+((y-1)*bw+x)*3+orien);
-			double dcorn = *(vecs+((y-1)*bw+x+1)*3+orien);
-			double dnext = *(vecs+(y*bw+x+1)*3+orien);
+			pdist = vecs[((y-1)*bw+x)*3+orien];
+			double dcorn = vecs[((y-1)*bw+x+1)*3+orien];
+			double dnext = vecs[(y*bw+x+1)*3+orien];
 			if (dcorn != -1.0) {
 				pdist = pdist + dcorn;
 				count++;
@@ -524,26 +528,26 @@ void calcpattvecs(const Pattern *pat, const uint32_t *im, const int iw,
 			}
 			pdist = pdist/count; // Normalizing
 
-			*(vecs+(y*bw+x)*3+orien) = getdist(pat, (im+(y+*(offs+1))*iw+x+*offs),
-										pdist, orien);
+			vecs[(y*bw+x)*3+orien] = getdist(pat,
+					im+(y+offs[1])*iw+x+offs[0], pdist, orien);
 		}
 	}
 
 	// Work our way right.
-	for (int x=*ipix+1; x<bw; x++) {
+	for (int x=ipix[0]+1; x<bw; x++) {
 		// Find a good starting point.
-		int iy = imin(*(yb+x*2+1),imax(*(ipix+1),*(yb+x*2)));
+		int iy = imin(yb[x*2+1], imax(ipix[1], yb[x*2]));
 		// Determining distance for starting point.
-		double pdist = *(vecs+(iy*bw+x-1)*3+orien);
-		*(vecs+(iy*bw+x)*3+orien) = getdist(pat, (im+(iy+*(offs+1))*iw+x+*offs),
-										pdist, orien);
+		double pdist = vecs[(iy*bw+x-1)*3+orien];
+		vecs[(iy*bw+x)*3+orien] = getdist(pat,
+				im+(iy+offs[1])*iw+x+offs[0], pdist, orien);
 		// Working up.
-		for (int y=iy-1; y>=*(yb+x*2); y--) {
+		for (int y=iy-1; y>=yb[x*2]; y--) {
 			int count = 1;
 			// Averaging from up to 3 surrounding distances.
-			pdist = *(vecs+((y+1)*bw+x)*3+orien);
-			double dcorn = *(vecs+((y+1)*bw+x-1)*3+orien);
-			double dnext = *(vecs+(y*bw+x-1)*3+orien);
+			pdist = vecs[((y+1)*bw+x)*3+orien];
+			double dcorn = vecs[((y+1)*bw+x-1)*3+orien];
+			double dnext = vecs[(y*bw+x-1)*3+orien];
 			if (dcorn != -1.0) {
 				pdist = pdist + dcorn;
 				count++;
@@ -554,16 +558,16 @@ void calcpattvecs(const Pattern *pat, const uint32_t *im, const int iw,
 			}
 			pdist = pdist/count; // Normalizing
 
-			*(vecs+(y*bw+x)*3+orien) = getdist(pat, (im+(y+*(offs+1))*iw+x+*offs),
-										pdist, orien);
+			vecs[(y*bw+x)*3+orien] = getdist(pat,
+					im+(y+offs[1])*iw+x+offs[0], pdist, orien);
 		}
 		// Working down.
-		for (int y=iy+1; y<=*(yb+x*2+1); y++) {
+		for (int y=iy+1; y<=yb[x*2+1]; y++) {
 			int count = 1;
 			// Averaging from up to 3 surrounding distances.
-			pdist = *(vecs+((y-1)*bw+x)*3+orien);
-			double dcorn = *(vecs+((y-1)*bw+x-1)*3+orien);
-			double dnext = *(vecs+(y*bw+x-1)*3+orien);
+			pdist = vecs[((y-1)*bw+x)*3+orien];
+			double dcorn = vecs[((y-1)*bw+x-1)*3+orien];
+			double dnext = vecs[(y*bw+x-1)*3+orien];
 			if (dcorn != -1.0) {
 				pdist = pdist + dcorn;
 				count++;
@@ -574,8 +578,8 @@ void calcpattvecs(const Pattern *pat, const uint32_t *im, const int iw,
 			}
 			pdist = pdist/count; // Normalizing
 
-			*(vecs+(y*bw+x)*3+orien) = getdist(pat, (im+(y+*(offs+1))*iw+x+*offs),
-										pdist, orien);
+			vecs[(y*bw+x)*3+orien] = getdist(pat,
+					(im+(y+offs[1])*iw+x+offs[0]), pdist, orien);
 		}
 	}
 }
@@ -814,18 +818,18 @@ void solvesurface(const Camera *cam, double *vecs, double *poss, const int bw,
 void surfnorm(const double *vin, const double *vre, double *snrm)
 {
 	// vin - incident ray, vre - reflected ray.
-	*(snrm) = *(vre) - *(vin);
-	*(snrm+1) = *(vre+1) - *(vin+1);
-	*(snrm+2) = *(vre+2) - *(vin+2);
+	snrm[0] = vre[0] - vin[0];
+	snrm[1] = vre[1] - vin[1];
+	snrm[2] = vre[2] - vin[2];
 	scale(1.0/norm(snrm), snrm);
 }
 
 double extrapolate(const Camera *cam, const double *ppos, const double *psnrm,
 		const double *ch)
 {
-	double pc[3] = {*ppos-cam->pos[0], *(ppos+1)-cam->pos[1],
-		*(ppos+2)-cam->pos[2]};
-	return dot(pc,psnrm)/dot(ch,psnrm);
+	double pc[3] = {ppos[0]-cam->pos[0], ppos[1]-cam->pos[1],
+		ppos[2]-cam->pos[2]};
+	return dot(pc, psnrm)/dot(ch, psnrm);
 }
 
 void slopeerror(const double *vecs, const double *poss, const int bw,
