@@ -842,37 +842,35 @@ void slopeerror(const double *vecs, const double *poss, const int bw,
 	// For sphere: params = xshift yshift zshift rad.
 	// For paraboloid: params = xshift yshift zshift xrot yrot zrot f1 f2.
 	size_t pointc = 0;
-	double *inorm = malloc(3*sizeof(*inorm)); // Ideal normal
+	double inorm[3]; // Ideal normal
 	double mux = 0.0; // Slope error mean
 	double muy = 0.0; // Slope error mean
-	double *locx = malloc(3*sizeof(*locx));
-	double *locy = malloc(3*sizeof(*locy));
+	double locx[3];
+	double locy[3];
 	double xaxis[3] = {1.0, 0.0, 0.0};
-	double *tpos1 = malloc(3*sizeof(*tpos1));
-	double *tpos2 = malloc(3*sizeof(*tpos2));
-	double *tnrm = malloc(3*sizeof(*tnrm));
-	double *rotm = malloc(9*sizeof(*rotm));
-	double *inrotm = malloc(9*sizeof(*rotm));
+	double tpos1[3];
+	double tpos2[3];
+	double tnrm[3];
+	double rotm[9];
+	double inrotm[9];
 	if (shape == 1) {
-		rotmatxyz(*(params+3), *(params+4), *(params+5), rotm);
-		rotmatzyx(-*(params+5), -*(params+4), -*(params+3), inrotm);
+		rotmatxyz(params[3], params[4], params[5], rotm);
+		rotmatzyx(-params[5], -params[4], -params[3], inrotm);
 	}
 	for (int px=0; px<bw; px++) {
-		for (int py=*(yb+px*2); py<=*(yb+px*2+1); py++) {
+		for (int py=yb[px*2]; py<=yb[px*2+1]; py++) {
 			// Work out ideal normal for x and y coords of given pixel.
 			if (shape == 0) {
-				sphereslope(*(poss+(py*bw+px)*3) + *(params),
-						*(poss+(py*bw+px)*3+1) + *(params+1), *(params+3),
-						inorm);
+				sphereslope(poss[(py*bw+px)*3] + params[0],
+						poss[(py*bw+px)*3+1] + params[1], params[3], inorm);
 			} else if (shape == 1) {
 				// Data shifted before being rotated.
-				*(tpos1) = *(poss+(py*bw+px)*3) + *(params);
-				*(tpos1+1) = *(poss+(py*bw+px)*3+1) + *(params+1);
-				*(tpos1+2) = *(poss+(py*bw+px)*3+2) + *(params+2);
+				tpos1[0] = poss[(py*bw+px)*3+0] + params[0];
+				tpos1[1] = poss[(py*bw+px)*3+1] + params[1];
+				tpos1[2] = poss[(py*bw+px)*3+2] + params[2];
 				// Data rotated. z in tpos2 not used past here.
 				matxvec(rotm, tpos1, tpos2);
-				parabslope(*(tpos2), *(tpos2+1), *(params+6), *(params+7),
-						tnrm);
+				parabslope(tpos2[0], tpos2[1], params[6], params[7], tnrm);
 				// Rotate inorm so that it matches up with data normals.
 				matxvec(inrotm, tnrm, inorm);
 			}
@@ -884,66 +882,50 @@ void slopeerror(const double *vecs, const double *poss, const int bw,
 			cross(locy, inorm, locx);
 			
 			// Working out local x and y components of surface norm.
-			double epsx = dot(locx, (vecs+(py*bw+px)*3));
-			double epsy = dot(locy, (vecs+(py*bw+px)*3));
+			double epsx = dot(locx, vecs+(py*bw+px)*3);
+			double epsy = dot(locy, vecs+(py*bw+px)*3);
 
 			// For now just save in vecs.
-			*(serr+(py*bw+px)*2) = epsx;
-			*(serr+(py*bw+px)*2+1) = epsy;
+			serr[(py*bw+px)*2+0] = epsx;
+			serr[(py*bw+px)*2+1] = epsy;
 
 			mux = mux + epsx;
 			muy = muy + epsy;
 			pointc++;
 		}
 	}
-	free(inorm);
-	inorm = NULL;
-	free(locx);
-	locx = NULL;
-	free(locy);
-	locy = NULL;
-	free(tpos1);
-	tpos1 = NULL;
-	free(tpos2);
-	tpos2 = NULL;
-	free(tnrm);
-	tnrm = NULL;
-	free(rotm);
-	rotm = NULL;
-	free(inrotm);
-	inrotm = NULL;
 
 	mux = mux/pointc;
 	muy = muy/pointc;
 	double sigx = 0.0;
 	double sigy = 0.0;
 	for (int px=0; px<bw; px++) {
-		for (int py=*(yb+px*2); py<=*(yb+px*2+1); py++) {
-			sigx = sigx + pow((*(serr+(py*bw+px)*2)-mux), 2.0);
-			sigy = sigy + pow((*(serr+(py*bw+px)*2+1)-muy), 2.0);
+		for (int py=yb[px*2]; py<=yb[px*2+1]; py++) {
+			sigx = sigx + pow(serr[(py*bw+px)*2+0]-mux, 2.0);
+			sigy = sigy + pow(serr[(py*bw+px)*2+1]-muy, 2.0);
 		}
 	}
 	sigx = sqrt(sigx/(pointc-1));
 	sigy = sqrt(sigy/(pointc-1));
-	*(sestats) = mux;
-	*(sestats+1) = muy;
-	*(sestats+2) = sigx;
-	*(sestats+3) = sigy;
+	sestats[0] = mux;
+	sestats[1] = muy;
+	sestats[2] = sigx;
+	sestats[3] = sigy;
 }
 
 void centroid(const uint32_t *im, uint32_t w, uint32_t h, const int *idot,
 		double *dot, int dotpx)
 {
 
-	double *region; // Region of pixels about dot guess
+	double *region = NULL; // Region of pixels about dot guess
 	int regw, regh; // Region width and height
 
 	// Finding the region boundaries which are 2 times dot size either side.
 	// Define x along width and y along height.
-	int lowx = *(idot) - 2*dotpx;
-	int highx = *(idot) + 2*dotpx;
-	int lowy = *(idot+1) - 2*dotpx;
-	int highy = *(idot+1) + 2*dotpx;
+	int lowx = idot[0] - 2*dotpx;
+	int highx = idot[0] + 2*dotpx;
+	int lowy = idot[1] - 2*dotpx;
+	int highy = idot[1] + 2*dotpx;
 	double backgr = 0.0;
 	double weight = 0.0;
 	double xmean = 0.0;
@@ -968,28 +950,29 @@ void centroid(const uint32_t *im, uint32_t w, uint32_t h, const int *idot,
 	for (int rx=0; rx<regw; rx++) {
 		for (int ry=0; ry<regh; ry++) {
 			double greypix;
-			uint32_t pix = *(im+(ry+lowy)*w+rx+lowx);
+			uint32_t pix = im[(ry+lowy)*w+rx+lowx];
 			greypix = TIFFGetR(pix) + TIFFGetG(pix) + TIFFGetB(pix);
 			greypix = 765.0 - greypix;
-			*(region+ry*regw+rx) = greypix;
+			region[ry*regw+rx] = greypix;
 		}
 	}
 
 	// Find the background intensity by looking at boundaries.
 	for (int rx=0; rx<regw; rx++) {
-		backgr = backgr + *(region+rx) + *(region+(regh-1)*regw+rx);
+		backgr = backgr + region[rx] + region[(regh-1)*regw+rx];
 	}
 	for (int ry=0; ry<regh; ry++) {
-		backgr = backgr + *(region+ry*regw) + *(region+ry*regw+regh-1);
+		backgr = backgr + region[ry*regw] + region[ry*regw+regh-1];
 	}
 	backgr = backgr/(2.0*regw + 2.0*regh);
 
 	// Subtract background intensity and find weighting.
 	for (int rx=0; rx<regw; rx++) {
 		for (int ry=0; ry<regh; ry++) {
-			double greypix = *(region+ry*regw+rx) - backgr;
-			if (greypix < 0) greypix = 0.0;
-			*(region+ry*regw+rx) = greypix;
+			double greypix = region[ry*regw+rx] - backgr;
+			if (greypix < 0)
+				greypix = 0.0;
+			region[ry*regw+rx] = greypix;
 			weight = weight + greypix;
 		}
 	}
@@ -997,16 +980,16 @@ void centroid(const uint32_t *im, uint32_t w, uint32_t h, const int *idot,
 	// Find x and y weighted means.
 	for (int rx=0; rx<regw; rx++) {
 		for (int ry=0; ry<regh; ry++) {
-			xmean = xmean + rx*(*(region+ry*regw+rx))/weight;
-			ymean = ymean + ry*(*(region+ry*regw+rx))/weight;
+			xmean = xmean + rx*region[ry*regw+rx]/weight;
+			ymean = ymean + ry*region[ry*regw+rx]/weight;
 		}
 	}
 
 	free(region);
 	region = NULL;
 
-	*(dot) = xmean + lowx;
-	*(dot+1) = ymean + lowy;
+	dot[0] = xmean + lowx;
+	dot[1] = ymean + lowy;
 }
 
 // Find line that intercepts two points
