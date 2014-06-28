@@ -40,6 +40,8 @@ void slopeerror(const double *vecs, const double *poss, const int bw,
 		const int *yb, const int shape, const double *params, double *serr,
 		double *sestats);
 void pnts_line(const int *p1, const int *p2, Polynom *pol, double *coeffs);
+void end_ybounds(const Polynom *l1, const Polynom *l2, const Polynom *l3,
+		const Polynom *l4, const int *cornt, const int *cornb, int *ybnd);
 
 void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 		const char *imfnh, const char *imfnv, const int *idots,
@@ -81,6 +83,9 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 	TIFFClose(image);
 	image = NULL;
 
+	// Locating camera position
+	// ************************
+
 	// Find centre of dots.
 	dotpx = objpixsize(&camera, mirror.dotsize, mirror.distguess);
 	for (int i=0; i<3; i++) {
@@ -102,9 +107,8 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 		printf("%d, %d\n", pxcorns[i*2], pxcorns[i*2+1]);
 	}
 
-	//double tempdirec[3];
-	//pixdir(&camera, 2129, 2918, tempdirec);
-	//printf("%f, %f, %f\n", tempdirec[0], tempdirec[1], tempdirec[2]);
+	// Identifying region of interest and finding bounds
+	// *************************************************
 
 	// Determining max and min bounds.
 	int xpixmax = imax(pxcorns[0], imax(pxcorns[2],
@@ -142,7 +146,7 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 	Polynom bline = {1, bcoeffs};
 	Polynom lline = {1, lcoeffs};
 	Polynom rline = {1, rcoeffs};
-	int ybound[2*xlen];
+	int ybound[2*xlen]; // Alternating top and bottom y bounds (C99 VLA)
 
 	// Finding polynomial to represent the 4 bounding lines
 	pnts_line(pxcorns+3*2, pxcorns+0*2, &tline, tcoeffs);
@@ -150,37 +154,11 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 	pnts_line(pxcorns+1*2, pxcorns+0*2, &lline, lcoeffs);
 	pnts_line(pxcorns+3*2, pxcorns+2*2, &rline, rcoeffs);
 
-	// Calculating bounds.
-	if (pxcorns[0] == pxcorns[1*2]) {
-		ybound[0] = pxcorns[1];
-		ybound[1] = pxcorns[1*2+1];
-	} else {
-		// At most one of the two loops will execute.
-		for (int x=pxcorns[0]; x<=pxcorns[1*2]; x++) {
-			ybound[x*2+0] = (int) round(polyget(&tline, (double) x));
-			ybound[x*2+1] = (int) round(polyget(&lline, (double) x));
-		}
-		for (int x=pxcorns[1*2]; x<=pxcorns[0]; x++) {
-			ybound[x*2+0] = (int) round(polyget(&lline, (double) x));
-			ybound[x*2+1] = (int) round(polyget(&bline, (double) x));
-		}
-	}
+	// Calculating y bounds for ends of region
+	end_ybounds(&tline, &lline, &lline, &bline, pxcorns+0*2, pxcorns+1*2, ybound);
+	end_ybounds(&rline, &bline, &tline, &rline, pxcorns+3*2, pxcorns+2*2, ybound);
 
-	if (pxcorns[2*2] == pxcorns[3*2]) {
-		ybound[(xlen-1)*2+0] = pxcorns[3*2+1];
-		ybound[(xlen-1)*2+1] = pxcorns[2*2+1];
-	} else {
-		// At most one of the two loops will execute.
-		for (int x=pxcorns[3*2]; x<=pxcorns[2*2]; x++) {
-			ybound[x*2+0] = (int) round(polyget(&rline, (double) x));
-			ybound[x*2+1] = (int) round(polyget(&bline, (double) x));
-		}
-		for (int x=*(pxcorns+2*2); x<=(*(pxcorns+3*2)); x++) {
-			ybound[x*2+0] = (int) round(polyget(&tline, (double) x));
-			ybound[x*2+1] = (int) round(polyget(&rline, (double) x));
-		}
-	}
-
+	// Calculating y bounds for centre part of region of interest
 	int startmid = imax(pxcorns[0], pxcorns[1*2]);
 	int endmid = imin(pxcorns[2*2], pxcorns[3*2]);
 	for (int x=startmid+1; x<endmid; x++) {
@@ -190,6 +168,9 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 
 	printf("ybound at 0: %d, %d\n", *ybound, *(ybound+1));
 
+	// Determine which part of pattern each pixel receives
+	// ***************************************************
+
 	// Set up array of vectors to hold pattern positions. Later on it holds
 	// normal vectors.
 	double *vecs = malloc(xlen*ylen*3*sizeof(*vecs));
@@ -198,9 +179,8 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 		exit(1);
 	}
 	// Initialising array to -1 which is used as a check in calcpattvecs.
-	for (int i=0; i<(xlen*ylen*3); i++) {
-		*(vecs+i) = -1.0;
-	}
+	for (int i=0; i<(xlen*ylen*3); i++)
+		vecs[i] = -1.0;
 	 
 	// Start looking in first segment.
 	calcpattvecs(&pattern, imdata, wid, vecs, xlen, pxcorns, ybound, offset,
@@ -233,8 +213,8 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 	TIFFClose(image);
 	image = NULL;
 
-	// Need to now find best fitting curve.
-	// And fit ideal curve.
+	// Find best fitting curves
+	// ************************
 
 	// Piece together pattern vector components and transform into global
 	// coordinates.
@@ -248,9 +228,8 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 		exit(1);
 	}
 	// Initialising array to -1 which is used as a check in solvesurface.
-	for (int i=0; i<(xlen*ylen*3); i++) {
-		*(poss+i) = -1.0;
-	}
+	for (int i=0; i<(xlen*ylen*3); i++)
+		poss[i] = -1.0;
 
 	// Testing different solution starts.
 	/*
@@ -271,12 +250,11 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 	double zmax = -100.0;
 	int meancount = 0;
 	for (int px=0; px<xlen; px++) {
-		for (int py=*(ybound+px*2); py<=*(ybound+px*2+1); py++) {
-			xmean = xmean + *(poss+(py*xlen+px)*3);
-			ymean = ymean + *(poss+(py*xlen+px)*3+1);
-			if (zmax < *(poss+(py*xlen+px)*3+2)) {
-				zmax = *(poss+(py*xlen+px)*3+2);
-			}
+		for (int py=ybound[px*2+0]; py<=ybound[px*2+1]; py++) {
+			xmean = xmean + poss[(py*xlen+px)*3+0];
+			ymean = ymean + poss[(py*xlen+px)*3+1];
+			if (zmax < poss[(py*xlen+px)*3+2])
+				zmax = poss[(py*xlen+px)*3+2];
 			meancount++;
 		}
 	}
@@ -284,10 +262,10 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 	ymean = ymean/meancount;
 	printf("xmean, ymean, zmax: %f, %f, %f\n", xmean, ymean, zmax);
 	for (int px=0; px<xlen; px++) {
-		for (int py=*(ybound+px*2); py<=*(ybound+px*2+1); py++) {
-			*(poss+(py*xlen+px)*3) = *(poss+(py*xlen+px)*3) - xmean;
-			*(poss+(py*xlen+px)*3+1) = *(poss+(py*xlen+px)*3+1) - ymean;
-			*(poss+(py*xlen+px)*3+2) = *(poss+(py*xlen+px)*3+2) - zmax;
+		for (int py=ybound[px*2+0]; py<=ybound[px*2+1]; py++) {
+			poss[(py*xlen+px)*3+0] = poss[(py*xlen+px)*3+0] - xmean;
+			poss[(py*xlen+px)*3+1] = poss[(py*xlen+px)*3+1] - ymean;
+			poss[(py*xlen+px)*3+2] = poss[(py*xlen+px)*3+2] - zmax;
 		}
 	}
 
@@ -314,20 +292,17 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 	sphstep = NULL;
 
 	// Saving parameters into array.
-	double *spvars = malloc(4*sizeof(*spvars));
-	*(spvars) = gsl_vector_get(sphfitvars, 0);
-	*(spvars+1) = gsl_vector_get(sphfitvars, 1);
-	*(spvars+2) = gsl_vector_get(sphfitvars, 2);
-	*(spvars+3) = gsl_vector_get(sphfitvars, 3);
+	double spvars[4];
+	for (int i=0; i<4; i++)
+		spvars[i] = gsl_vector_get(sphfitvars, i);
 
 	gsl_vector_free(sphfitvars);
 	sphfitvars = NULL;
 
 	printf("Best fit sphere:\n");
-	printf("%f, %f, %f, %f\n", *(spvars), *(spvars+1), *(spvars+2),
-			*(spvars+3));
+	printf("%f, %f, %f, %f\n", spvars[0], spvars[1], spvars[2], spvars[3]);
 
-	// Need to now find best fitting paraboloid.
+	// Find best fitting paraboloid.
 	gsl_vector *parfitvars = gsl_vector_alloc(8);
 	gsl_vector_set(parfitvars, 0, 0.0); // x0
 	gsl_vector_set(parfitvars, 1, 0.0); // y0
@@ -335,8 +310,8 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 	gsl_vector_set(parfitvars, 3, 0.0); // xrot
 	gsl_vector_set(parfitvars, 4, 0.0); // yrot
 	gsl_vector_set(parfitvars, 5, 0.0); // zrot
-	gsl_vector_set(parfitvars, 6, *(spvars+3)/2.0); // f1
-	gsl_vector_set(parfitvars, 7, *(spvars+3)/2.0); // f2
+	gsl_vector_set(parfitvars, 6, spvars[3]/2.0); // f1
+	gsl_vector_set(parfitvars, 7, spvars[3]/2.0); // f2
 
 	// Step size for first trial.
 	gsl_vector *parstep = gsl_vector_alloc(8);
@@ -354,27 +329,22 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 
 	gsl_vector_free(parstep);
 	parstep = NULL;
-	printf("done\n");
 
 	// Saving parameters into array.
-	double *pavars = malloc(8*sizeof(*pavars));
-	*(pavars) = gsl_vector_get(parfitvars, 0);
-	*(pavars+1) = gsl_vector_get(parfitvars, 1);
-	*(pavars+2) = gsl_vector_get(parfitvars, 2);
-	*(pavars+3) = gsl_vector_get(parfitvars, 3);
-	*(pavars+4) = gsl_vector_get(parfitvars, 4);
-	*(pavars+5) = gsl_vector_get(parfitvars, 5);
-	*(pavars+6) = gsl_vector_get(parfitvars, 6);
-	*(pavars+7) = gsl_vector_get(parfitvars, 7);
+	double pavars[8];
+	for (int i=0; i<8; i++)
+		pavars[i] = gsl_vector_get(parfitvars, i);
 
 	gsl_vector_free(parfitvars);
 	parfitvars = NULL;
 
 	printf("Best fit paraboloid:\n");
-	printf("%lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf\n", *(pavars), *(pavars+1),
-			*(pavars+2), *(pavars+3), *(pavars+4), *(pavars+5), *(pavars+6),
-			*(pavars+7));
+	printf("%lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf\n", pavars[0], pavars[1],
+			pavars[2], pavars[3], pavars[4], pavars[5], pavars[6], pavars[7]);
 	
+	// Calculating slope errors relative to surfaces
+	// *********************************************
+
 	// Setting up arrays for slope error data.
 	double *spserr = malloc(xlen*ylen*2*sizeof(*spserr)); // Sphere s/e
 	if (spserr == NULL) {
@@ -406,8 +376,8 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 	// fn, sphere RoC, parab f1, parab f2, parab zrot, sphere sigx,
 	// sphere sigy, parab sigx, parab sigy.
 	fprintf(resultfile, "%s,%10.4e,%10.4e,%10.4e,%10.4e,%10.4e,%10.4e,%10.4e,%10.4e\n",
-			outfn, *(spvars+3), *(pavars+6), *(pavars+7), *(pavars+5),
-			spsest[2], spsest[3], pasest[2], pasest[3]);
+			outfn, spvars[3], pavars[6], pavars[7], pavars[5], spsest[2],
+			spsest[3], pasest[2], pasest[3]);
 	fclose(resultfile);
 	resultfile = NULL;
 
@@ -422,9 +392,9 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 		exit(1);
 	}
 	for (int x=0; x<xlen; x=x+xlen/40) {
-		for (int y=*(ybound+x*2); y<=*(ybound+x*2+1); y=y+xlen/40) {
-			fprintf(ssavefile, "%10.3e,%10.3e\n", *(spserr+(y*xlen+x)*2),
-				*(spserr+(y*xlen+x)*2+1));
+		for (int y=ybound[x*2+0]; y<=ybound[x*2+1]; y=y+xlen/40) {
+			fprintf(ssavefile, "%10.3e,%10.3e\n", spserr[(y*xlen+x)*2+0],
+				spserr[(y*xlen+x)*2+1]);
 		}
 	}
 	fclose(ssavefile);
@@ -443,9 +413,9 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 		exit(1);
 	}
 	for (int x=0; x<xlen; x=x+xlen/40) {
-		for (int y=*(ybound+x*2); y<=*(ybound+x*2+1); y=y+xlen/40) {
-			fprintf(ssavefile, "%10.3e,%10.3e\n", *(paserr+(y*xlen+x)*2),
-				*(paserr+(y*xlen+x)*2+1));
+		for (int y=ybound[x*2+0]; y<=ybound[x*2+1]; y=y+xlen/40) {
+			fprintf(ssavefile, "%10.3e,%10.3e\n", paserr[(y*xlen+x)*2+0],
+				paserr[(y*xlen+x)*2+1]);
 		}
 	}
 	fclose(ssavefile);
@@ -453,11 +423,6 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
  
 	free(psefn);
 	psefn = NULL;
-
-	free(spvars);
-	spvars = NULL;
-	free(pavars);
-	pavars = NULL;
 
 	free(spserr);
 	spserr = NULL;
@@ -475,9 +440,9 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 		exit(1);
 	}
 	for (int x=0; x<xlen; x=x+xlen/100) {
-		for (int y=*(ybound+x*2); y<=*(ybound+x*2+1); y=y+xlen/100) {
-			fprintf(savefile, "%10.3e,%10.3e,%10.3e\n", *(poss+(y*xlen+x)*3),
-				*(poss+(y*xlen+x)*3+1), *(poss+(y*xlen+x)*3+2));
+		for (int y=ybound[x*2+0]; y<=ybound[x*2+1]; y=y+xlen/100) {
+			fprintf(savefile, "%10.3e,%10.3e,%10.3e\n", poss[(y*xlen+x)*3+0],
+				poss[(y*xlen+x)*3+1], poss[(y*xlen+x)*3+2]);
 		}
 	}
 	fclose(savefile);
@@ -495,9 +460,9 @@ void solveprofile(Camera camera, Pattern pattern, Mirror mirror,
 		exit(1);
 	}
 	for (int x=0; x<xlen; x=x+xlen/40) {
-		for (int y=*(ybound+x*2); y<=*(ybound+x*2+1); y=y+xlen/40) {
-			fprintf(savefile, "%10.3e,%10.3e,%10.3e\n", *(poss+(y*xlen+x)*3),
-				*(poss+(y*xlen+x)*3+1), *(poss+(y*xlen+x)*3+2));
+		for (int y=ybound[x*2+0]; y<=ybound[x*2+1]; y=y+xlen/40) {
+			fprintf(savefile, "%10.3e,%10.3e,%10.3e\n", poss[(y*xlen+x)*3+0],
+				poss[(y*xlen+x)*3+1], poss[(y*xlen+x)*3+2]);
 		}
 	}
 	fclose(savefile);
@@ -1053,3 +1018,27 @@ void pnts_line(const int *p1, const int *p2, Polynom *pol, double *coeffs)
 		coeffs[0] = (double) (p2[1] - coeffs[1]*p2[0]);
 	}
 }
+
+/*
+ * Find upper and lower y bounds for ends of region of interest.
+ */
+void end_ybounds(const Polynom *l1, const Polynom *l2, const Polynom *l3,
+		const Polynom *l4, const int *cornt, const int *cornb, int *ybnd)
+{
+	// If corners have same x value then we have a vertical line.
+	if (cornt[0] == cornb[0]) {
+		ybnd[cornt[0]*2+0] = cornt[1];
+		ybnd[cornt[0]*2+1] = cornb[2];
+	} else {
+		// At most one of the two loops will execute.
+		for (int x=cornt[0]; x<=cornb[0]; x++) {
+			ybnd[x*2+0] = (int) round(polyget(l1, (double) x));
+			ybnd[x*2+1] = (int) round(polyget(l2, (double) x));
+		}
+		for (int x=cornb[0]; x<=cornt[0]; x++) {
+			ybnd[x*2+0] = (int) round(polyget(l3, (double) x));
+			ybnd[x*2+1] = (int) round(polyget(l4, (double) x));
+		}
+	}
+}
+
