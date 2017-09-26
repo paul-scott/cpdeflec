@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
 
 	if (argc != 10) {
 		printf("Incorrect number of arguments.\n\n"
-				"profile.o himage vimage p1x p1y p2x p2y p3x p3y outfn\n\n");
+				"cpdeflec himage vimage p1x p1y p2x p2y p3x p3y outfn\n\n");
 		exit(1);
 	}
 
